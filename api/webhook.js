@@ -8,6 +8,93 @@ if (!getApps().length) {
 const db = getFirestore();
 
 // ============================================
+// 대장장이 대사 시스템
+// ============================================
+const BLACKSMITH_LINES = {
+  success: [
+    "허허, 이 정도 실력이면 뭐...",
+    "오, 제법인데? 운이 좋군.",
+    "흠, 나쁘지 않아. 계속 해볼 텐가?",
+    "이 정도면 쓸만하겠어.",
+    "좋았어! 빛이 나는군!"
+  ],
+  fail: [
+    "쯧, 운명의 장난인가...",
+    "이런... 다음엔 될 거야.",
+    "에휴, 재료가 아까워.",
+    "운이 없군. 다시 해볼 텐가?",
+    "망했어... 아, 장비 말고 강화가."
+  ],
+  destroy: [
+    "이런... 미안하군...",
+    "아아... 눈 뜨고 못 보겠네.",
+    "...다음엔 더 조심하지.",
+    "장비가... 가루가 됐어...",
+    "미안... 내 실력이 부족했나..."
+  ],
+  maintain: [
+    "쓸데없이 튼튼하기만 하군.",
+    "강화는 실패했지만 장비는 멀쩡해.",
+    "운이 나쁘진 않았어. 장비는 살았으니.",
+    "휴, 다행히 부서지진 않았네.",
+    "괜찮아, 아직 기회는 있어."
+  ],
+  greet: [
+    "어서 와. 뭘 강화할 건가?",
+    "오, 손님이군. 장비 좀 보자.",
+    "강화? 좋지, 뭘 가져왔나?",
+    "내 모루가 기다리고 있었다네."
+  ],
+  maxEnhance: [
+    "이미 완벽해! 더 이상은 무리야.",
+    "이 이상은 신의 영역이지...",
+    "+10이면 충분하지 않나?",
+    "욕심도 많군. 이게 최고야."
+  ]
+};
+
+const getRandomLine = (type) => {
+  const lines = BLACKSMITH_LINES[type];
+  return lines[Math.floor(Math.random() * lines.length)];
+};
+
+// ============================================
+// 전투 대사 시스템
+// ============================================
+const BATTLE_LINES = {
+  bossAppear: [
+    "강한 기운이 느껴진다...",
+    "조심해! 보스다!",
+    "이 층의 주인이 나타났다!"
+  ],
+  victory: [
+    "승리다!",
+    "해냈어!",
+    "적을 쓰러뜨렸다!"
+  ],
+  levelUp: [
+    "몸에 힘이 솟는다!",
+    "더 강해진 느낌이야!",
+    "새로운 경지에 도달했다!"
+  ],
+  death: [
+    "이런... 여기서 쓰러지다니...",
+    "아직... 갈 길이 먼데...",
+    "다음엔... 반드시..."
+  ],
+  itemDrop: [
+    "뭔가 떨어졌다!",
+    "전리품을 발견했다!",
+    "빛나는 무언가가 보인다!"
+  ]
+};
+
+const getBattleLine = (type) => {
+  const lines = BATTLE_LINES[type];
+  return lines[Math.floor(Math.random() * lines.length)];
+};
+
+// ============================================
 // 직업 시스템 (6개 + 패시브 + 스킬)
 // ============================================
 const JOBS = {
@@ -89,36 +176,43 @@ const BOSSES = {
 // 장비 시스템
 // ============================================
 const ITEM_GRADES = {
-  1: { name: '일반', prefix: '낡은', mult: 1.0 },
-  2: { name: '강화', prefix: '단단한', mult: 2.0 },
-  3: { name: '희귀', prefix: '정교한', mult: 3.5 },
-  4: { name: '정예', prefix: '마력의', mult: 6.0 },
-  5: { name: '영웅', prefix: '영웅의', mult: 10.0 }
+  1: { name: '일반', prefix: '낡은', mult: 1.0, color: '⚪' },
+  2: { name: '고급', prefix: '단단한', mult: 2.0, color: '🟢' },
+  3: { name: '희귀', prefix: '정교한', mult: 3.5, color: '🔵' },
+  4: { name: '영웅', prefix: '마력의', mult: 6.0, color: '🟣' },
+  5: { name: '전설', prefix: '전설의', mult: 10.0, color: '🟡' }
 };
 
 const ITEM_TYPES = {
-  weapon: { name: '무기', types: ['검', '도끼', '창'], mainStat: 'atk', base: 6 },
-  armor: { name: '방어구', types: ['갑옷', '로브'], mainStat: 'def', base: 4 },
-  accessory: { name: '장신구', types: ['반지', '목걸이'], mainStat: 'evasion', base: 3 }
+  weapon: { name: '무기', types: ['검', '도끼', '창', '단검', '대검'], mainStat: 'atk', base: 6 },
+  armor: { name: '방어구', types: ['갑옷', '로브', '가죽옷'], mainStat: 'def', base: 4 },
+  accessory: { name: '장신구', types: ['반지', '목걸이', '귀걸이'], mainStat: 'evasion', base: 3 }
 };
 
 const ITEM_PROCS = [
   { id: 'bleed', name: '출혈', slot: 'weapon', desc: '3턴 5% DoT' },
   { id: 'lifesteal', name: '흡혈', slot: 'weapon', desc: '피해 8% 회복' },
+  { id: 'critical', name: '필살', slot: 'weapon', desc: '크리티컬 +8%' },
   { id: 'barrier', name: '장막', slot: 'armor', desc: '30% 확률 보호막' },
   { id: 'thorns', name: '가시', slot: 'armor', desc: '피해 30% 반사' },
-  { id: 'lucky', name: '행운', slot: 'accessory', desc: '골드 +20%' }
+  { id: 'vitality', name: '활력', slot: 'armor', desc: 'HP +15%' },
+  { id: 'lucky', name: '행운', slot: 'accessory', desc: '골드 +20%' },
+  { id: 'insight', name: '통찰', slot: 'accessory', desc: '해석 +5%' }
 ];
 
 // ============================================
 // 강화 시스템
 // ============================================
 const ENHANCE_RATES = {
-  1: 90, 2: 85, 3: 75, 4: 60, 5: 45,
-  6: 35, 7: 25, 8: 18, 9: 12, 10: 8
+  1: 95, 2: 90, 3: 80, 4: 70, 5: 55,
+  6: 40, 7: 30, 8: 20, 9: 12, 10: 7
 };
-const ENHANCE_COST = (lv) => Math.floor(50 + lv * 30 + Math.pow(lv, 2) * 10);
-const ENHANCE_BONUS = 0.12; // 강화 1당 12% 스탯 증가
+const DESTROY_RATES = {
+  1: 0, 2: 0, 3: 0, 4: 0, 5: 10,
+  6: 15, 7: 25, 8: 35, 9: 45, 10: 50
+};
+const ENHANCE_COST = (lv) => Math.floor(80 + lv * 50 + Math.pow(lv, 2) * 15);
+const ENHANCE_BONUS = 0.15; // 강화 1당 15% 스탯 증가
 
 // ============================================
 // 유틸리티 함수
@@ -133,6 +227,10 @@ async function getUser(id) {
 
 async function saveUser(id, data) {
   await db.collection('users').doc(id).set(data, { merge: true });
+}
+
+async function deleteUser(id) {
+  await db.collection('users').doc(id).delete();
 }
 
 async function getUserByName(name) {
@@ -177,6 +275,11 @@ function calcStats(p) {
     evasion += Math.floor((item.stats?.evasion || 0) * enhMult);
     critRate += Math.floor((item.stats?.critRate || 0) * enhMult);
     interpret += Math.floor((item.stats?.interpret || 0) * enhMult);
+    
+    // Proc 보너스
+    if (item.proc?.id === 'critical') critRate += 8;
+    if (item.proc?.id === 'vitality') maxHp = Math.floor(maxHp * 1.15);
+    if (item.proc?.id === 'insight') interpret += 5;
   });
   
   if (p.job === 'wanderer' && p.hp < maxHp * 0.4) atk *= 1.25;
@@ -271,13 +374,13 @@ function generateItem(monsterGrade, floor, madnessOpen = false) {
   if (slot.mainStat === 'evasion') stats.evasion = mainVal;
   else stats[slot.mainStat] = mainVal;
   
-  if (grade >= 2 && Math.random() < 0.6) stats.critRate += Math.floor(grade * 0.8);
-  if (grade >= 3 && Math.random() < 0.5) stats.interpret += Math.floor(grade * 1.0);
-  if (grade >= 4 && Math.random() < 0.4) stats.maxHp += Math.floor(grade * 8);
+  if (grade >= 2 && Math.random() < 0.6) stats.critRate += Math.floor(grade * 1.2);
+  if (grade >= 3 && Math.random() < 0.5) stats.interpret += Math.floor(grade * 1.5);
+  if (grade >= 4 && Math.random() < 0.4) stats.maxHp += Math.floor(grade * 12);
   
   let proc = null;
   const procs = ITEM_PROCS.filter(p => p.slot === slotKey);
-  if (procs.length && Math.random() < 0.08 + grade * 0.07) {
+  if (procs.length && Math.random() < 0.06 + grade * 0.06) {
     proc = procs[Math.floor(Math.random() * procs.length)];
   }
   
@@ -285,8 +388,8 @@ function generateItem(monsterGrade, floor, madnessOpen = false) {
     id: Date.now() + Math.random(),
     name: `${gd.prefix} ${itemType}${proc ? ` [${proc.name}]` : ''}`,
     slot: slotKey, slotName: slot.name,
-    grade, gradeName: gd.name, stats, proc,
-    enhance: 0
+    grade, gradeName: gd.name, gradeColor: gd.color,
+    stats, proc, enhance: 0
   };
 }
 
@@ -299,12 +402,14 @@ function getItemStatText(item) {
   if (item.stats.evasion) st.push(`회피+${Math.floor(item.stats.evasion * enhMult)}`);
   if (item.stats.critRate) st.push(`크리+${Math.floor(item.stats.critRate * enhMult)}`);
   if (item.stats.interpret) st.push(`해석+${Math.floor(item.stats.interpret * enhMult)}`);
+  if (item.proc) st.push(`[${item.proc.name}]`);
   return st.join(' ') || '효과 없음';
 }
 
 function getItemDisplay(item) {
   const enh = item.enhance > 0 ? `+${item.enhance} ` : '';
-  return `${enh}${item.name}`;
+  const color = item.gradeColor || '';
+  return `${color}${enh}${item.name}`;
 }
 
 // ============================================
@@ -337,7 +442,6 @@ function simulateDuel(p1, p2) {
   while (hp1 > 0 && hp2 > 0 && turn < 20) {
     turn++;
     
-    // P1 공격
     let dmg1 = Math.max(1, s1.atk - s2.def * 0.4);
     const crit1 = Math.random() * 100 < s1.critRate;
     const dodge2 = Math.random() * 100 < s2.evasion;
@@ -352,7 +456,6 @@ function simulateDuel(p1, p2) {
     
     if (hp2 <= 0) break;
     
-    // P2 공격
     let dmg2 = Math.max(1, s2.atk - s1.def * 0.4);
     const crit2 = Math.random() * 100 < s2.critRate;
     const dodge1 = Math.random() * 100 < s1.evasion;
@@ -367,19 +470,18 @@ function simulateDuel(p1, p2) {
   }
   
   const winner = hp1 > hp2 ? p1 : p2;
-  const loser = hp1 > hp2 ? p2 : p1;
   
   return {
-    winner, loser,
+    winner,
     hp1: Math.max(0, hp1),
     hp2: Math.max(0, hp2),
     turns: turn,
-    log: log.slice(-6) // 마지막 6턴만
+    log: log.slice(-6)
   };
 }
 
 // ============================================
-// 응답 포맷
+// 응답 포맷 (확장)
 // ============================================
 function reply(text, buttons = []) {
   const response = {
@@ -394,11 +496,93 @@ function reply(text, buttons = []) {
   return response;
 }
 
+// 다중 출력 (텍스트 + 텍스트)
+function replyMulti(texts, buttons = []) {
+  const response = {
+    version: '2.0',
+    template: { 
+      outputs: texts.map(t => ({ simpleText: { text: t } }))
+    }
+  };
+  if (buttons.length > 0) {
+    response.template.quickReplies = buttons.map(b => ({
+      label: b, action: 'message', messageText: b
+    }));
+  }
+  return response;
+}
+
+// BasicCard (이미지 + 버튼)
+function replyCard(title, description, buttons = [], quickReplies = [], imageUrl = null) {
+  const card = {
+    title,
+    description
+  };
+  
+  if (imageUrl) {
+    card.thumbnail = { imageUrl };
+  }
+  
+  if (buttons.length > 0) {
+    card.buttons = buttons.map(b => ({
+      label: b.label,
+      action: 'message',
+      messageText: b.text || b.label
+    }));
+  }
+  
+  const response = {
+    version: '2.0',
+    template: { 
+      outputs: [{ basicCard: card }]
+    }
+  };
+  
+  if (quickReplies.length > 0) {
+    response.template.quickReplies = quickReplies.map(b => ({
+      label: b, action: 'message', messageText: b
+    }));
+  }
+  
+  return response;
+}
+
+// 텍스트 + 카드 조합
+function replyTextAndCard(text, title, description, cardButtons = [], quickReplies = []) {
+  const response = {
+    version: '2.0',
+    template: { 
+      outputs: [
+        { simpleText: { text } },
+        { 
+          basicCard: {
+            title,
+            description,
+            buttons: cardButtons.map(b => ({
+              label: b.label,
+              action: 'message',
+              messageText: b.text || b.label
+            }))
+          }
+        }
+      ]
+    }
+  };
+  
+  if (quickReplies.length > 0) {
+    response.template.quickReplies = quickReplies.map(b => ({
+      label: b, action: 'message', messageText: b
+    }));
+  }
+  
+  return response;
+}
+
 // ============================================
 // 메인 핸들러
 // ============================================
 module.exports = async (req, res) => {
-  if (req.method !== 'POST') return res.json({ message: 'ETHER v2.1 OK' });
+  if (req.method !== 'POST') return res.json({ message: 'ETHER v2.3 OK' });
 
   try {
     const userId = req.body?.userRequest?.user?.id;
@@ -407,9 +591,8 @@ module.exports = async (req, res) => {
 
     let u = await getUser(userId);
 
-    // ==================== 소셜 커맨드 (로그인 전에도 사용 가능) ====================
+    // ==================== 소셜 커맨드 ====================
     
-    // @랭킹
     if (msg === '@랭킹' || msg === '랭킹') {
       const floorRank = await getTopUsers('floor', 10);
       let text = '🏆 에테르의 탑 랭킹\n\n';
@@ -421,7 +604,6 @@ module.exports = async (req, res) => {
       return res.json(reply(text, u ? ['전투', '상태', '@자랑'] : ['시작']));
     }
     
-    // @전투력랭킹
     if (msg === '@전투력' || msg === '전투력랭킹') {
       const snapshot = await db.collection('users').where('phase', '==', 'town').get();
       const users = snapshot.docs.map(doc => ({ ...doc.data() }));
@@ -436,13 +618,85 @@ module.exports = async (req, res) => {
       return res.json(reply(text, u ? ['전투', '상태', '@자랑'] : ['시작']));
     }
 
+    // ==================== 도움말 시스템 ====================
+    if (msg === '도움말' || msg === '?') {
+      return res.json(reply(
+        `📚 에테르의 탑 도움말\n\n어떤 도움이 필요하신가요?`,
+        ['전투도움말', '장비도움말', '직업도움말', '스탯도움말', '명령어목록', '돌아가기']
+      ));
+    }
+    
+    if (msg === '전투도움말') {
+      return res.json(reply(
+        `⚔️ 전투 시스템\n\n` +
+        `📢 전조(힌트)를 읽고 행동 선택!\n\n` +
+        `🗡️ 공격 - 기본 데미지\n` +
+        `💨 회피 - 피해 무효 (성공시)\n` +
+        `👁 해석 - 성공시 크리 확정!\n` +
+        `🛡️ 방어 - 피해 50% 감소\n` +
+        `✨ 스킬 - 직업 고유 능력\n` +
+        `🧪 물약 - HP 회복`,
+        ['도움말', '돌아가기']
+      ));
+    }
+    
+    if (msg === '장비도움말') {
+      return res.json(reply(
+        `🎒 장비 시스템\n\n` +
+        `⭐ 등급: 일반→고급→희귀→영웅→전설\n\n` +
+        `🔨 강화 (+10까지)\n` +
+        `• 강화당 스탯 +15%\n` +
+        `• +5부터 파괴 확률 있음!\n` +
+        `• +7이상 파괴 확률 25%+\n\n` +
+        `💎 특수효과 (Proc)\n` +
+        `무기: 출혈, 흡혈, 필살\n` +
+        `방어구: 장막, 가시, 활력\n` +
+        `장신구: 행운, 통찰`,
+        ['도움말', '돌아가기']
+      ));
+    }
+    
+    if (msg === '직업도움말') {
+      let text = `📜 직업 안내\n\n`;
+      Object.entries(JOBS).forEach(([id, j]) => {
+        text += `${j.icon} ${j.name}\n└ ${j.desc}\n└ 스킬: ${j.skill.name}\n\n`;
+      });
+      return res.json(reply(text, ['도움말', '돌아가기']));
+    }
+    
+    if (msg === '스탯도움말') {
+      return res.json(reply(
+        `📊 스탯 설명\n\n` +
+        `💪 STR - 공격력, HP\n` +
+        `🏃 DEX - 회피, 크리티컬\n` +
+        `📖 INT - 해석력\n` +
+        `🧠 WIL - 방어, 해석, HP\n` +
+        `❤️ VIT - HP, 방어\n` +
+        `🍀 LUK - 크리, 회피\n\n` +
+        `🌀 광기 - 드랍률 영향\n` +
+        `⚡ Focus - 스킬 자원`,
+        ['도움말', '돌아가기']
+      ));
+    }
+    
+    if (msg === '명령어목록') {
+      return res.json(reply(
+        `📋 명령어 목록\n\n` +
+        `기본: 전투, 상태, 장비, 상점, 휴식\n` +
+        `장비: 장착1~5, 판매1~5, 강화\n` +
+        `소셜: 랭킹, @자랑, @결투\n` +
+        `기타: 저장, 초기화, 도움말`,
+        ['도움말', '돌아가기']
+      ));
+    }
+
     // ==================== 신규 유저 ====================
     if (!u) {
       if (msg === '시작') {
         await saveUser(userId, { phase: 'naming' });
         return res.json(reply('🌫️ 회색 안개 속에서 눈을 떴다...\n\n당신의 이름은?'));
       }
-      return res.json(reply('🏔️ 에테르의 탑\n\n[시작]을 눌러 게임을 시작하세요.', ['시작', '랭킹']));
+      return res.json(reply('🏔️ 에테르의 탑\n\n[시작]을 눌러 게임을 시작하세요.', ['시작', '랭킹', '도움말']));
     }
 
     // ==================== @자랑 ====================
@@ -454,22 +708,14 @@ module.exports = async (req, res) => {
       let text = `📜 ${u.name}의 모험 기록\n`;
       text += `━━━━━━━━━━━━━━━\n`;
       text += `${job?.icon || ''} ${job?.name || '무직'} Lv.${u.lv}\n`;
-      text += `🏔️ ${u.floor}층 도달\n`;
-      text += `⚔️ 전투력: ${power}\n\n`;
-      text += `❤️ HP: ${c.maxHp}\n`;
-      text += `⚔️ 공격: ${c.atk} | 🛡️ 방어: ${c.def}\n`;
-      text += `💨 회피: ${c.evasion}% | 💥 크리: ${c.critRate}%\n`;
-      text += `👁 해석: ${c.interpret}%\n\n`;
+      text += `🏔️ ${u.maxFloor}층 도달 | ⚔️ ${power}\n\n`;
+      text += `❤️${c.maxHp} ⚔️${c.atk} 🛡️${c.def}\n`;
+      text += `💨${c.evasion}% 💥${c.critRate}% 👁${c.interpret}%\n\n`;
       
-      text += `📦 장비\n`;
       ['weapon', 'armor', 'accessory'].forEach(slot => {
         const item = u.equipment?.[slot];
-        if (item) {
-          text += `└ ${getItemDisplay(item)}\n`;
-        }
+        if (item) text += `${getItemDisplay(item)}\n`;
       });
-      
-      text += `\n💰 ${u.gold}G | 🌀 광기: ${u.madness || 0}`;
       
       return res.json(reply(text, ['전투', '랭킹', '@결투']));
     }
@@ -478,32 +724,19 @@ module.exports = async (req, res) => {
     if (msg.startsWith('@결투 ') || msg.startsWith('결투 ')) {
       const targetName = msg.replace('@결투 ', '').replace('결투 ', '').trim();
       
-      if (!targetName) {
-        return res.json(reply('결투할 상대의 이름을 입력하세요.\n예: @결투 홍길동', ['돌아가기']));
-      }
-      
-      if (targetName === u.name) {
-        return res.json(reply('자기 자신과는 결투할 수 없습니다!', ['돌아가기']));
-      }
+      if (!targetName) return res.json(reply('결투할 상대의 이름을 입력하세요.\n예: @결투 홍길동', ['돌아가기']));
+      if (targetName === u.name) return res.json(reply('자기 자신과는 결투할 수 없습니다!', ['돌아가기']));
       
       const target = await getUserByName(targetName);
-      if (!target) {
-        return res.json(reply(`"${targetName}" 플레이어를 찾을 수 없습니다.`, ['돌아가기']));
-      }
+      if (!target) return res.json(reply(`"${targetName}" 플레이어를 찾을 수 없습니다.`, ['돌아가기']));
       
-      // 결투 비용
       const duelCost = 50;
-      if (u.gold < duelCost) {
-        return res.json(reply(`결투 비용이 부족합니다. (${duelCost}G 필요)`, ['돌아가기']));
-      }
+      if (u.gold < duelCost) return res.json(reply(`골드 부족 (${duelCost}G 필요)`, ['돌아가기']));
       
       u.gold -= duelCost;
-      
-      // 결투 시뮬레이션
       const result = simulateDuel(u, target);
       const isWinner = result.winner.name === u.name;
       
-      // 보상/페널티
       const reward = Math.floor(50 + target.lv * 10);
       if (isWinner) {
         u.gold += reward;
@@ -514,19 +747,11 @@ module.exports = async (req, res) => {
       
       await saveUser(userId, u);
       
-      let text = `⚔️ 결투! ${u.name} vs ${target.name}\n`;
-      text += `━━━━━━━━━━━━━━━\n\n`;
+      let text = `⚔️ ${u.name} vs ${target.name}\n━━━━━━━━━━━━━━━\n`;
       result.log.forEach(l => text += `${l}\n`);
-      text += `\n━━━━━━━━━━━━━━━\n`;
-      text += `${result.winner.name} 승리! (${result.turns}턴)\n\n`;
-      
-      if (isWinner) {
-        text += `🎉 승리 보상: +${reward}G\n`;
-      } else {
-        text += `💀 패배...\n`;
-      }
-      
-      text += `\n📊 전적: ${u.duelWins || 0}승 ${u.duelLosses || 0}패`;
+      text += `━━━━━━━━━━━━━━━\n`;
+      text += isWinner ? `🎉 승리! +${reward}G` : `💀 패배...`;
+      text += `\n전적: ${u.duelWins || 0}승 ${u.duelLosses || 0}패`;
       
       return res.json(reply(text, ['전투', '상태', '@결투', '랭킹']));
     }
@@ -541,10 +766,9 @@ module.exports = async (req, res) => {
         return res.json(reply('이름은 1~8자로 입력해주세요.'));
       }
       
-      // 중복 체크
       const existing = await getUserByName(msg);
       if (existing) {
-        return res.json(reply('이미 사용 중인 이름입니다. 다른 이름을 입력해주세요.'));
+        return res.json(reply('이미 사용 중인 이름입니다.'));
       }
       
       await saveUser(userId, { ...u, phase: 'job', name: msg });
@@ -573,22 +797,35 @@ module.exports = async (req, res) => {
       
       await saveUser(userId, {
         phase: 'town', name: u.name, job: jobId,
-        lv: 1, exp: 0, gold: 150, floor: 1, maxFloor: 1,
+        lv: 1, exp: 0, gold: 200, floor: 1, maxFloor: 1,
         stats, hp: c.maxHp, maxHp: c.maxHp,
         focus: 60, maxFocus: 100, madness: 0,
         equipment: { weapon: null, armor: null, accessory: null },
-        inventory: [], skillCd: 0, potions: 2,
-        duelWins: 0, duelLosses: 0
+        inventory: [], skillCd: 0, potions: 3, hiPotions: 1,
+        duelWins: 0, duelLosses: 0,
+        createdAt: new Date().toISOString()
       });
       
+      return res.json(replyMulti([
+        `${job.icon} ${job.name} 각성!`,
+        `❤️ HP: ${c.maxHp}\n⚔️ 공격: ${c.atk} | 🛡️ 방어: ${c.def}\n👁 해석: ${c.interpret}%\n\n✨ 스킬: ${job.skill.name}\n└ ${job.skill.desc}\n\n💰 200G | 🧪 물약 3개\n\n[전투]로 탑을 오르세요!`
+      ], ['전투', '상태', '장비', '상점', '도움말']));
+    }
+
+    // ==================== 초기화 확인 ====================
+    if (u.phase === 'confirm_reset') {
+      if (msg === '초기화확인') {
+        const oldName = u.name;
+        await deleteUser(userId);
+        return res.json(reply(`💀 ${oldName}의 기록이 삭제되었습니다.`, ['시작']));
+      }
+      if (msg === '취소') {
+        await saveUser(userId, { ...u, phase: 'town' });
+        return res.json(reply('초기화가 취소되었습니다.', ['전투', '상태', '장비', '상점', '휴식']));
+      }
       return res.json(reply(
-        `${job.icon} ${job.name} 각성!\n\n` +
-        `❤️ HP: ${c.maxHp}\n` +
-        `⚔️ 공격: ${c.atk} | 🛡️ 방어: ${c.def}\n` +
-        `👁 해석: ${c.interpret}%\n` +
-        `💰 150G | 🏔️ 1층\n\n` +
-        `✨ 스킬: ${job.skill.name}\n└ ${job.skill.desc}`,
-        ['전투', '상태', '장비', '상점', '휴식']
+        `⚠️ 정말 초기화하시겠습니까?\n\n모든 진행 상황이 삭제됩니다!`,
+        ['초기화확인', '취소']
       ));
     }
 
@@ -597,6 +834,24 @@ module.exports = async (req, res) => {
       const c = calcStats(u);
       const job = JOBS[u.job];
       const isBoss = BOSSES[u.floor] !== undefined;
+      
+      // 초기화
+      if (msg === '초기화') {
+        await saveUser(userId, { ...u, phase: 'confirm_reset' });
+        return res.json(reply(
+          `⚠️ 캐릭터 초기화\n\n${u.name} Lv.${u.lv}\n🏔️ ${u.maxFloor}층 | 💰 ${u.gold}G\n\n정말 삭제하시겠습니까?`,
+          ['초기화확인', '취소']
+        ));
+      }
+      
+      // 저장
+      if (msg === '저장') {
+        const power = calcPower(u);
+        return res.json(reply(
+          `💾 자동 저장 중!\n\n${job.icon} ${u.name} Lv.${u.lv}\n⚔️ ${power} | 🏔️ ${u.maxFloor}층\n💰 ${u.gold}G`,
+          ['전투', '상태', '장비', '상점', '휴식']
+        ));
+      }
       
       // 전투 시작
       if (msg === '전투' || msg === '광기전투') {
@@ -611,13 +866,22 @@ module.exports = async (req, res) => {
           shamanDR: 0, ironDRTurns: 0
         });
         
+        if (monster.isBoss) {
+          // 보스는 카드형으로
+          return res.json(replyTextAndCard(
+            `⭐ BOSS ⭐\n${getBattleLine('bossAppear')}`,
+            monster.name,
+            `[${monster.typeName}] 등급: ${GRADES[monster.grade].name}\n\n👹 HP: ${monster.hp}\n📢 ${action.text}`,
+            [],
+            ['공격', '회피', '해석', '방어', '스킬', '물약']
+          ));
+        }
+        
         let battleText = madnessOpen ? '🌀 광기 개방!\n\n' : '';
-        battleText += `${monster.isBoss ? '⭐ BOSS ⭐\n' : ''}`;
         battleText += `${monster.name} 출현!\n`;
-        battleText += `[${monster.typeName}] 등급: ${GRADES[monster.grade].name}\n\n`;
-        battleText += `👹 HP: ${monster.hp}/${monster.maxHp}\n`;
-        battleText += `❤️ HP: ${u.hp}/${c.maxHp}\n`;
-        battleText += `⚡ Focus: ${u.focus}/${u.maxFocus}\n\n`;
+        battleText += `[${monster.typeName}] ${GRADES[monster.grade].name}\n\n`;
+        battleText += `👹 ${monster.hp}/${monster.maxHp}\n`;
+        battleText += `❤️ ${u.hp}/${c.maxHp} | ⚡ ${u.focus}\n\n`;
         battleText += `📢 ${action.text}\n└ ${action.hint}`;
         
         if (madnessOpen) {
@@ -632,53 +896,46 @@ module.exports = async (req, res) => {
         const req = getReqExp(u.lv);
         const power = calcPower(u);
         return res.json(reply(
-          `📊 ${u.name} Lv.${u.lv}\n` +
-          `${job.icon} ${job.name}\n\n` +
+          `📊 ${u.name} Lv.${u.lv}\n${job.icon} ${job.name}\n\n` +
           `⚔️ 전투력: ${power}\n` +
-          `❤️ HP: ${u.hp}/${c.maxHp}\n` +
-          `⚡ Focus: ${u.focus}/${u.maxFocus}\n` +
+          `❤️ ${u.hp}/${c.maxHp} | ⚡ ${u.focus}/${u.maxFocus}\n` +
           `🌀 광기: ${u.madness || 0}/100\n\n` +
-          `⚔️ 공격: ${c.atk} | 🛡️ 방어: ${c.def}\n` +
-          `💨 회피: ${c.evasion}% | 💥 크리: ${c.critRate}%\n` +
-          `👁 해석: ${c.interpret}%\n\n` +
-          `📈 EXP: ${u.exp}/${req}\n` +
-          `💰 ${u.gold}G | 🏔️ ${u.floor}층${isBoss ? ' ⭐' : ''}\n` +
-          `🧪 물약: ${u.potions || 0}개\n` +
-          `📊 결투: ${u.duelWins || 0}승 ${u.duelLosses || 0}패`,
-          ['전투', '장비', '상점', '휴식', '@자랑', '랭킹']
+          `⚔️${c.atk} 🛡️${c.def} 💨${c.evasion}%\n` +
+          `💥${c.critRate}% 👁${c.interpret}%\n\n` +
+          `📈 ${u.exp}/${req} | 💰 ${u.gold}G\n` +
+          `🏔️ ${u.floor}층${isBoss ? ' ⭐보스' : ''} | 🧪 ${u.potions || 0}개`,
+          ['전투', '장비', '상점', '휴식', '@자랑']
         ));
       }
       
       // 장비
       if (msg === '장비') {
-        let equipText = `🎒 장착 장비\n\n`;
+        let text = `🎒 장착 장비\n\n`;
         ['weapon', 'armor', 'accessory'].forEach(slot => {
           const item = u.equipment?.[slot];
           const slotName = ITEM_TYPES[slot].name;
           if (item) {
-            equipText += `${slotName}: ${getItemDisplay(item)}\n└ ${getItemStatText(item)}\n`;
+            text += `${slotName}: ${getItemDisplay(item)}\n└ ${getItemStatText(item)}\n`;
           } else {
-            equipText += `${slotName}: (없음)\n`;
+            text += `${slotName}: (없음)\n`;
           }
         });
         
         const inv = u.inventory || [];
         if (inv.length > 0) {
-          equipText += `\n📦 인벤토리 (${inv.length}개)\n`;
+          text += `\n📦 인벤토리 (${inv.length})\n`;
           inv.slice(0, 5).forEach((item, i) => {
-            equipText += `${i + 1}. ${getItemDisplay(item)} [${item.gradeName}]\n`;
+            text += `${i + 1}. ${getItemDisplay(item)}\n`;
           });
-          if (inv.length > 5) equipText += `...외 ${inv.length - 5}개`;
+          if (inv.length > 5) text += `...외 ${inv.length - 5}개`;
         }
         
         const buttons = ['돌아가기'];
         if (inv.length > 0) buttons.unshift('장착1', '판매1');
-        
-        // 강화 가능한 장비 체크
         const hasEquip = Object.values(u.equipment || {}).some(e => e !== null);
         if (hasEquip) buttons.push('강화');
         
-        return res.json(reply(equipText, buttons));
+        return res.json(reply(text, buttons));
       }
       
       // 장착
@@ -709,7 +966,7 @@ module.exports = async (req, res) => {
         }
         
         const item = inv[idx];
-        const price = Math.floor((item.grade * 15 + 10) * (1 + (item.enhance || 0) * 0.5));
+        const price = Math.floor((item.grade * 20 + 15) * (1 + (item.enhance || 0) * 0.5));
         u.inventory = inv.filter((_, i) => i !== idx);
         u.gold += price;
         
@@ -717,10 +974,15 @@ module.exports = async (req, res) => {
         return res.json(reply(`💰 ${getItemDisplay(item)} 판매!\n+${price}G`, ['장비', '돌아가기']));
       }
       
-      // ========== 강화 시스템 ==========
+      // ========== 강화 시스템 (카드형 UI) ==========
       if (msg === '강화') {
-        let text = '🔨 강화할 장비를 선택하세요.\n\n';
-        const buttons = [];
+        const hasEquip = Object.values(u.equipment || {}).filter(e => e !== null);
+        if (hasEquip.length === 0) {
+          return res.json(reply('강화할 장비가 없습니다.', ['장비', '돌아가기']));
+        }
+        
+        let desc = '';
+        const cardButtons = [];
         
         ['weapon', 'armor', 'accessory'].forEach((slot, i) => {
           const item = u.equipment?.[slot];
@@ -728,18 +990,24 @@ module.exports = async (req, res) => {
             const enh = item.enhance || 0;
             const cost = ENHANCE_COST(enh);
             const rate = ENHANCE_RATES[enh + 1] || 5;
-            text += `${i + 1}. ${getItemDisplay(item)}\n`;
-            text += `   └ 다음: +${enh + 1} (${rate}%) - ${cost}G\n\n`;
-            buttons.push(`강화${i + 1}`);
+            const destroy = DESTROY_RATES[enh + 1] || 0;
+            desc += `${i + 1}. ${getItemDisplay(item)}\n`;
+            desc += `   +${enh}→+${enh + 1} (${rate}%`;
+            if (destroy > 0) desc += ` 💀${destroy}%`;
+            desc += `) ${cost}G\n`;
+            cardButtons.push({ label: `강화${i + 1}`, text: `강화${i + 1}` });
           }
         });
         
-        if (buttons.length === 0) {
-          return res.json(reply('강화할 장비가 없습니다.', ['장비', '돌아가기']));
-        }
+        cardButtons.push({ label: '그만두기', text: '돌아가기' });
         
-        buttons.push('돌아가기');
-        return res.json(reply(text, buttons));
+        return res.json(replyTextAndCard(
+          `🔨 대장장이: "${getRandomLine('greet')}"`,
+          '⚒️ 강화',
+          `${desc}\n💰 보유: ${u.gold}G`,
+          cardButtons,
+          ['전투', '상태', '장비', '상점']
+        ));
       }
       
       if (msg.startsWith('강화')) {
@@ -759,14 +1027,21 @@ module.exports = async (req, res) => {
         
         const enh = item.enhance || 0;
         if (enh >= 10) {
-          return res.json(reply('이미 최대 강화입니다! (+10)', ['강화', '돌아가기']));
+          return res.json(replyTextAndCard(
+            `🔨 대장장이: "${getRandomLine('maxEnhance')}"`,
+            `${getItemDisplay(item)}`,
+            `이미 최대 강화입니다! (+10)\n\n${getItemStatText(item)}`,
+            [{ label: '돌아가기', text: '강화' }],
+            ['전투', '상태', '장비', '상점']
+          ));
         }
         
         const cost = ENHANCE_COST(enh);
         const rate = ENHANCE_RATES[enh + 1] || 5;
+        const destroyRate = DESTROY_RATES[enh + 1] || 0;
         
         if (u.gold < cost) {
-          return res.json(reply(`골드가 부족합니다. (${cost}G 필요)`, ['강화', '돌아가기']));
+          return res.json(reply(`골드가 부족합니다. (${cost}G 필요)\n보유: ${u.gold}G`, ['강화', '돌아가기']));
         }
         
         u.gold -= cost;
@@ -775,34 +1050,44 @@ module.exports = async (req, res) => {
         if (success) {
           item.enhance = enh + 1;
           await saveUser(userId, u);
-          return res.json(reply(
-            `🎉 강화 성공!\n\n` +
-            `${getItemDisplay(item)}\n` +
-            `${getItemStatText(item)}\n\n` +
-            `-${cost}G`,
-            ['강화', '장비', '돌아가기']
+          
+          return res.json(replyTextAndCard(
+            `🔨 대장장이: "${getRandomLine('success')}"`,
+            `✨ +${enh} → +${enh + 1} 성공!`,
+            `${getItemDisplay(item)}\n${getItemStatText(item)}\n\n-${cost}G | 💰 ${u.gold}G`,
+            [
+              { label: '계속 강화', text: '강화' },
+              { label: '그만두기', text: '돌아가기' }
+            ],
+            ['전투', '상태', '장비', '상점']
           ));
         } else {
-          // 실패 시 파괴 확률 (강화 수치에 따라)
-          const destroyChance = enh >= 7 ? 30 : (enh >= 5 ? 15 : 0);
-          const destroyed = Math.random() * 100 < destroyChance;
+          const destroyed = Math.random() * 100 < destroyRate;
           
           if (destroyed) {
+            const itemName = item.name;
             u.equipment[slot] = null;
             await saveUser(userId, u);
-            return res.json(reply(
-              `💥 강화 실패... 장비 파괴!\n\n` +
-              `${item.name}이(가) 사라졌습니다...\n\n` +
-              `-${cost}G`,
-              ['장비', '돌아가기']
+            
+            return res.json(replyTextAndCard(
+              `🔨 대장장이: "${getRandomLine('destroy')}"`,
+              `💥 강화 실패 - 파괴!`,
+              `${itemName}이(가) 사라졌습니다...\n\n-${cost}G | 💰 ${u.gold}G`,
+              [{ label: '돌아가기', text: '장비' }],
+              ['전투', '상태', '장비', '상점']
             ));
           } else {
             await saveUser(userId, u);
-            return res.json(reply(
-              `❌ 강화 실패...\n\n` +
-              `${getItemDisplay(item)} 유지\n\n` +
-              `-${cost}G`,
-              ['강화', '장비', '돌아가기']
+            
+            return res.json(replyTextAndCard(
+              `🔨 대장장이: "${getRandomLine('maintain')}"`,
+              `❌ 강화 실패 - 유지`,
+              `${getItemDisplay(item)}\n장비는 파괴되지 않았습니다.\n\n-${cost}G | 💰 ${u.gold}G`,
+              [
+                { label: '계속 강화', text: '강화' },
+                { label: '그만두기', text: '돌아가기' }
+              ],
+              ['전투', '상태', '장비', '상점']
             ));
           }
         }
@@ -810,18 +1095,18 @@ module.exports = async (req, res) => {
       
       // 상점
       if (msg === '상점') {
-        const potionCost = 40 + u.floor * 2;
+        const potionCost = 50 + u.floor * 3;
         return res.json(reply(
           `🏪 상점\n\n` +
-          `🧪 물약 (${potionCost}G)\n└ HP 40% 회복\n\n` +
-          `💊 고급물약 (${potionCost * 3}G)\n└ HP 100% 회복\n\n` +
-          `보유: 💰 ${u.gold}G`,
+          `🧪 물약 (${potionCost}G) - HP 40%\n` +
+          `💊 고급물약 (${potionCost * 3}G) - HP 100%\n\n` +
+          `💰 ${u.gold}G`,
           ['물약구매', '고급물약구매', '돌아가기']
         ));
       }
       
       if (msg === '물약구매') {
-        const cost = 40 + u.floor * 2;
+        const cost = 50 + u.floor * 3;
         if (u.gold < cost) return res.json(reply('골드가 부족합니다.', ['상점', '돌아가기']));
         u.gold -= cost;
         u.potions = (u.potions || 0) + 1;
@@ -830,7 +1115,7 @@ module.exports = async (req, res) => {
       }
       
       if (msg === '고급물약구매') {
-        const cost = (40 + u.floor * 2) * 3;
+        const cost = (50 + u.floor * 3) * 3;
         if (u.gold < cost) return res.json(reply('골드가 부족합니다.', ['상점', '돌아가기']));
         u.gold -= cost;
         u.hiPotions = (u.hiPotions || 0) + 1;
@@ -840,10 +1125,10 @@ module.exports = async (req, res) => {
       
       // 휴식
       if (msg === '휴식') {
-        const cost = 30 + u.floor * 5;
+        const cost = 40 + u.floor * 6;
         if (u.gold < cost) return res.json(reply(`골드 부족 (${cost}G 필요)`, ['전투', '상태']));
         
-        if (Math.random() < 0.15) {
+        if (Math.random() < 0.12) {
           u.gold -= Math.floor(cost / 2);
           u.madness = clamp((u.madness || 0) + 10, 0, 100);
           const monster = spawnMonster(u.floor);
@@ -857,22 +1142,22 @@ module.exports = async (req, res) => {
           });
           
           return res.json(reply(
-            `💀 휴식 중 습격!\n\n${monster.name} 출현!\n\n📢 ${action.text}`,
+            `💀 휴식 중 습격!\n\n${monster.name} 출현!\n📢 ${action.text}`,
             ['공격', '회피', '해석', '방어', '스킬', '물약']
           ));
         }
         
         u.gold -= cost;
-        const heal = Math.floor(c.maxHp * 0.35);
+        const heal = Math.floor(c.maxHp * 0.4);
         u.hp = Math.min(c.maxHp, u.hp + heal);
-        u.focus = Math.min(u.maxFocus, u.focus + 30);
-        if (u.madness > 0) u.madness = Math.max(0, u.madness - 12);
+        u.focus = Math.min(u.maxFocus, u.focus + 35);
+        if (u.madness > 0) u.madness = Math.max(0, u.madness - 15);
         u.skillCd = 0;
         
         await saveUser(userId, u);
         return res.json(reply(
-          `💤 휴식!\n-${cost}G\n❤️ +${heal} HP\n⚡ +30 Focus` +
-          (u.madness > 0 ? `\n🌀 -12 광기` : ''),
+          `💤 휴식 완료!\n-${cost}G\n❤️ +${heal} HP | ⚡ +35 Focus` +
+          (u.madness > 0 ? `\n🌀 -15 광기` : ''),
           ['전투', '상태', '장비', '상점', '휴식']
         ));
       }
@@ -881,17 +1166,17 @@ module.exports = async (req, res) => {
         return res.json(reply(
           `🏔️ ${u.floor}층${isBoss ? ' ⭐보스⭐' : ''}\n\n` +
           `❤️ ${u.hp}/${c.maxHp} | ⚡ ${u.focus}/${u.maxFocus}\n` +
-          `🌀 광기: ${u.madness || 0} | 💰 ${u.gold}G`,
+          `🌀 ${u.madness || 0} | 💰 ${u.gold}G`,
           ['전투', '광기전투', '상태', '장비', '상점', '휴식']
         ));
       }
       
-      // 기본 마을 화면
+      // 기본 마을
       return res.json(reply(
-        `🏔️ ${u.floor}층${isBoss ? ' ⭐보스⭐' : ''}\n\n` +
-        `❤️ ${u.hp}/${c.maxHp} | ⚡ ${u.focus}/${u.maxFocus}\n` +
-        `🌀 광기: ${u.madness || 0} | 💰 ${u.gold}G`,
-        ['전투', '광기전투', '상태', '장비', '상점', '휴식', '랭킹']
+        `🏔️ ${u.floor}층${isBoss ? ' ⭐보스' : ''}\n\n` +
+        `❤️ ${u.hp}/${c.maxHp} | ⚡ ${u.focus}\n` +
+        `🌀 ${u.madness || 0} | 💰 ${u.gold}G`,
+        ['전투', '광기전투', '상태', '장비', '상점', '휴식', '도움말']
       ));
     }
 
@@ -903,85 +1188,68 @@ module.exports = async (req, res) => {
       const eAction = u.nextAction;
       let log = '';
       
-      if (u.bleedTurns > 0) {
-        const bd = Math.floor(m.maxHp * 0.05);
-        m.hp -= bd;
-        log += `🩸 출혈 ${bd}!\n`;
-        u.bleedTurns--;
-      }
-      
-      // ===== 플레이어 행동 =====
+      // 플레이어 행동
       if (msg === '공격') {
-        let dmg = Math.max(1, c.atk - m.def * 0.4);
-        const critChance = c.critRate + (u.interpretBonus || 0) + (u.critBoost || 0);
-        const isCrit = Math.random() * 100 < critChance;
-        
-        if (isCrit) {
-          dmg = Math.floor(dmg * 2.0);
-          log += `💥 크리티컬! ${dmg} 데미지!\n`;
-        } else {
-          dmg = Math.floor(dmg);
-          log += `⚔️ ${dmg} 데미지!\n`;
-        }
+        let dmg = Math.floor(c.atk - m.def * 0.4);
+        const isCrit = Math.random() * 100 < (c.critRate + (u.critBoost || 0) + (u.interpretBonus || 0));
+        if (isCrit) dmg = Math.floor(dmg * 2);
+        m.hp -= Math.max(1, dmg);
+        log += isCrit ? `💥 크리티컬! ${dmg}\n` : `⚔️ ${dmg} 데미지\n`;
         
         const weapon = u.equipment?.weapon;
-        if (weapon?.proc?.id === 'bleed' && Math.random() < 0.18) {
-          u.bleedTurns = 3;
-          log += `🩸 출혈 부여!\n`;
+        if (weapon?.proc?.id === 'bleed' && !m.bleedTurns) {
+          m.bleedTurns = 3;
+          log += `🩸 출혈!\n`;
         }
         if (weapon?.proc?.id === 'lifesteal') {
-          const ls = Math.floor(dmg * 0.08);
-          u.hp = Math.min(c.maxHp, u.hp + ls);
-          log += `💚 흡혈 +${ls}\n`;
+          const steal = Math.floor(dmg * 0.08);
+          u.hp = Math.min(c.maxHp, u.hp + steal);
+          log += `🧛 +${steal} HP\n`;
         }
         
-        m.hp -= dmg;
-        u.interpretBonus = 0;
         u.critBoost = 0;
+        u.interpretBonus = 0;
       }
       
       else if (msg === '회피') {
-        const dodgeChance = 30 + c.evasion;
-        if (Math.random() * 100 < dodgeChance) {
-          log += `💨 회피 성공!\n`;
+        const evadeChance = clamp(c.evasion + 15, 10, 85);
+        if (Math.random() * 100 < evadeChance) {
           eAction.type = 'dodged';
-          if (u.job === 'hunter') {
-            u.critBoost = 35;
-            log += `🏹 크리티컬 +35%!\n`;
-          }
+          log += `💨 회피 성공!\n`;
+          if (u.job === 'hunter') u.critBoost = 35;
         } else {
-          log += `💨 회피 실패! 피해 +20%\n`;
-          eAction.mult = (eAction.mult || 1) * 1.2;
+          log += `❌ 회피 실패!\n`;
         }
       }
       
       else if (msg === '해석') {
-        if (Math.random() * 100 < c.interpret) {
-          u.interpretBonus = 35;
-          log += `👁 해석 성공! 크리+35%\n`;
+        const interpChance = c.interpret + (u.interpretBonus || 0);
+        if (Math.random() * 100 < interpChance) {
+          u.interpretBonus = 100;
+          log += `👁 해석 성공! 크리 확정!\n`;
           if (u.job === 'shaman') {
             u.shamanDR = 0.25;
-            log += `👁 받는 피해 -25%\n`;
+            log += `🔮 피해 -25%\n`;
           }
         } else {
-          log += `👁 해석 실패...\n`;
+          log += `❌ 해석 실패\n`;
         }
       }
       
       else if (msg === '방어') {
         u.isDefending = true;
-        log += `🛡️ 방어 태세!\n`;
+        log += `🛡️ 방어 태세\n`;
         if (u.job === 'ironblood' && Math.random() < 0.5) {
-          const counter = Math.floor(c.atk * 0.5);
+          const counter = Math.floor(c.atk * 0.6);
           m.hp -= counter;
-          log += `⚔️ 반격! ${counter} 데미지!\n`;
+          log += `⚔️ 반격 ${counter}!\n`;
         }
       }
       
       else if (msg === '스킬') {
         if (!job) return res.json(reply('직업이 없습니다.', ['공격', '회피', '해석', '방어']));
         if (u.focus < job.skill.cost) return res.json(reply(`Focus 부족! (${job.skill.cost} 필요)`, ['공격', '회피', '해석', '방어']));
-        if (u.skillCd > 0) return res.json(reply(`쿨타임 ${u.skillCd}턴 남음`, ['공격', '회피', '해석', '방어']));
+        if (u.skillCd > 0) return res.json(reply(`쿨타임 ${u.skillCd}턴!`, ['공격', '회피', '해석', '방어']));
         
         u.focus -= job.skill.cost;
         u.skillCd = job.skill.cd;
@@ -990,35 +1258,35 @@ module.exports = async (req, res) => {
           let dmg = Math.floor(c.atk * 1.8 - m.def * 0.4);
           if (m.hp < m.maxHp * 0.3) dmg = Math.floor(dmg * 1.5);
           m.hp -= Math.max(1, dmg);
-          log += `✨ 결단의 일격! ${dmg} 데미지!\n`;
+          log += `✨ 결단의 일격! ${dmg}\n`;
         }
         else if (u.job === 'hunter') {
           u.interpretBonus = 70;
           let dmg = Math.floor(c.atk * 1.6 - m.def * 0.4);
           m.hp -= Math.max(1, dmg);
-          log += `✨ 약점 저격! ${dmg} 데미지!\n`;
+          log += `✨ 약점 저격! ${dmg}\n`;
         }
         else if (u.job === 'heretic') {
           u.madness = clamp((u.madness || 0) + 18, 0, 100);
-          log += `✨ 금기 주문! 드랍률 대폭 상승!\n`;
+          log += `✨ 금기 주문! 드랍↑\n`;
         }
         else if (u.job === 'shaman') {
           let dmg = Math.floor(c.atk * 1.4 - m.def * 0.4);
           m.hp -= Math.max(1, dmg);
           const steal = Math.floor(dmg * 0.2);
           u.hp = Math.min(c.maxHp, u.hp + steal);
-          log += `✨ 혼의 갈고리! ${dmg} 데미지, +${steal} HP!\n`;
+          log += `✨ 혼의 갈고리! ${dmg} +${steal}HP\n`;
         }
         else if (u.job === 'ironblood') {
           u.ironDRTurns = 3;
-          log += `✨ 철의 포효! 3턴간 피해 -40%\n`;
+          log += `✨ 철의 포효! 3턴 피해↓\n`;
         }
         else if (u.job === 'scribe') {
           if (Math.random() < 0.6) {
             eAction.type = 'jammed';
-            log += `✨ 문장 왜곡! 적 행동 무효!\n`;
+            log += `✨ 문장 왜곡! 적 무효!\n`;
           } else {
-            log += `✨ 문장 왜곡 실패...\n`;
+            log += `✨ 왜곡 실패...\n`;
           }
         }
       }
@@ -1030,12 +1298,12 @@ module.exports = async (req, res) => {
         if ((u.hiPotions || 0) > 0 && u.hp < c.maxHp * 0.5) {
           u.hiPotions--;
           u.hp = c.maxHp;
-          log += `💊 고급물약! HP 전회복!\n`;
+          log += `💊 HP 전회복!\n`;
         } else if ((u.potions || 0) > 0) {
           u.potions--;
           const heal = Math.floor(c.maxHp * 0.4);
           u.hp = Math.min(c.maxHp, u.hp + heal);
-          log += `🧪 물약! +${heal} HP\n`;
+          log += `🧪 +${heal} HP\n`;
         }
       }
       
@@ -1046,7 +1314,7 @@ module.exports = async (req, res) => {
           const goldLoss = Math.floor(u.gold * 0.05);
           u.gold = Math.max(0, u.gold - goldLoss);
           await saveUser(userId, { ...u, phase: 'town', monster: null });
-          return res.json(reply(`🏃 도망 성공!\n-${goldLoss}G`, ['전투', '상태', '장비', '상점', '휴식']));
+          return res.json(reply(`🏃 도망 성공! -${goldLoss}G`, ['전투', '상태', '장비', '상점', '휴식']));
         } else {
           log += `🏃 도망 실패!\n`;
         }
@@ -1056,7 +1324,7 @@ module.exports = async (req, res) => {
         return res.json(reply('행동을 선택하세요.', ['공격', '회피', '해석', '방어', '스킬', '물약', '도망']));
       }
       
-      // ===== 몬스터 처치 체크 =====
+      // 몬스터 처치
       if (m.hp <= 0) {
         m.hp = 0;
         const expGain = m.exp;
@@ -1067,9 +1335,10 @@ module.exports = async (req, res) => {
         u.gold += goldGain;
         u.madness = clamp((u.madness || 0) + (m.isBoss ? 12 : (u.madnessOpen ? 7 : 3)), 0, 100);
         
-        log += `\n🎉 ${m.name} 처치!\n`;
-        log += `+${expGain} EXP, +${goldGain} G\n`;
+        log += `\n🎉 ${getBattleLine('victory')}\n`;
+        log += `+${expGain} EXP +${goldGain}G\n`;
         
+        // 레벨업 체크
         const req = getReqExp(u.lv);
         if (u.exp >= req) {
           u.exp -= req;
@@ -1079,15 +1348,17 @@ module.exports = async (req, res) => {
           u.hp = u.maxHp;
           u.maxFocus = Math.min(160, u.maxFocus + 6);
           u.focus = u.maxFocus;
-          log += `\n🎉 LEVEL UP! Lv.${u.lv}\n`;
+          log += `\n⭐ LEVEL UP! Lv.${u.lv}\n${getBattleLine('levelUp')}\n`;
         }
         
+        // 층수 상승
         if (m.isBoss || Math.random() < 0.7) {
           u.floor++;
           if (u.floor > u.maxFloor) u.maxFloor = u.floor;
           log += `🏔️ ${u.floor}층 도달!\n`;
         }
         
+        // 아이템 드랍
         const drops = m.isBoss ? 3 : 1;
         let gotItems = [];
         for (let i = 0; i < drops; i++) {
@@ -1098,18 +1369,28 @@ module.exports = async (req, res) => {
           }
         }
         
+        await saveUser(userId, { ...u, phase: 'town', monster: null });
+        
+        // 아이템 획득시 카드형 출력
         if (gotItems.length > 0) {
-          log += `\n📦 획득 아이템:\n`;
+          let itemDesc = '';
           gotItems.forEach(item => {
-            log += `★ ${item.name}\n  ${getItemStatText(item)}\n`;
+            itemDesc += `${getItemDisplay(item)}\n${getItemStatText(item)}\n\n`;
           });
+          
+          return res.json(replyTextAndCard(
+            log,
+            `📦 ${getBattleLine('itemDrop')}`,
+            itemDesc,
+            [{ label: '확인', text: '돌아가기' }],
+            ['전투', '상태', '장비', '상점', '휴식']
+          ));
         }
         
-        await saveUser(userId, { ...u, phase: 'town', monster: null });
         return res.json(reply(log, ['전투', '상태', '장비', '상점', '휴식']));
       }
       
-      // ===== 적 턴 =====
+      // 적 턴
       if (eAction.type !== 'dodged' && eAction.type !== 'jammed') {
         let eDmg = Math.floor(m.atk * (eAction.mult || 1));
         
@@ -1123,7 +1404,7 @@ module.exports = async (req, res) => {
           u.ironDRTurns--;
           const reflect = Math.floor(eDmg * 0.3);
           m.hp -= reflect;
-          log += `🌵 가시 반사 ${reflect}!\n`;
+          log += `🌵 반사 ${reflect}\n`;
         }
         
         eDmg = Math.max(1, eDmg - c.def * 0.35);
@@ -1132,26 +1413,24 @@ module.exports = async (req, res) => {
         if (armor?.proc?.id === 'barrier' && Math.random() < 0.3) {
           const block = Math.floor(c.maxHp * 0.15);
           eDmg = Math.max(0, eDmg - block);
-          log += `🛡️ 장막! -${block}\n`;
+          log += `🛡️ 장막 -${block}\n`;
         }
         if (armor?.proc?.id === 'thorns' && eDmg > 0) {
           const reflect = Math.floor(eDmg * 0.3);
           m.hp -= reflect;
-          log += `🌵 가시 ${reflect}!\n`;
+          log += `🌵 가시 ${reflect}\n`;
         }
         
         u.hp -= Math.floor(eDmg);
         
-        if (eAction.type === 'special') {
-          log += `💥 필살기! ${Math.floor(eDmg)} 피해!\n`;
-        } else if (eAction.type === 'heavy') {
-          log += `⚠️ 강공격! ${Math.floor(eDmg)} 피해!\n`;
-        } else if (eAction.type === 'heal') {
+        if (eAction.type === 'special') log += `💥 필살기! ${Math.floor(eDmg)}\n`;
+        else if (eAction.type === 'heavy') log += `⚠️ 강공격 ${Math.floor(eDmg)}\n`;
+        else if (eAction.type === 'heal') {
           const heal = Math.floor(m.maxHp * eAction.mult);
           m.hp = Math.min(m.maxHp, m.hp + heal);
           log += `💚 적 회복 +${heal}\n`;
         } else if (eAction.type !== 'buff') {
-          log += `👹 ${Math.floor(eDmg)} 피해!\n`;
+          log += `👹 ${Math.floor(eDmg)} 피해\n`;
         }
       }
       
@@ -1159,7 +1438,7 @@ module.exports = async (req, res) => {
       u.focus = Math.min(u.maxFocus, (u.focus || 0) + 10);
       if (u.skillCd > 0) u.skillCd--;
       
-      // ===== 플레이어 사망 =====
+      // 플레이어 사망
       if (u.hp <= 0) {
         u.hp = 0;
         const goldLoss = Math.floor(u.gold * 0.12);
@@ -1173,12 +1452,12 @@ module.exports = async (req, res) => {
         
         await saveUser(userId, { ...u, phase: 'town', monster: null });
         return res.json(reply(
-          `${log}\n💀 패배...\n\n-${goldLoss}G\n🏔️ ${u.floor}층으로 귀환`,
+          `${log}\n💀 ${getBattleLine('death')}\n\n-${goldLoss}G | 🏔️ ${u.floor}층`,
           ['전투', '상태', '장비', '상점', '휴식']
         ));
       }
       
-      // ===== 다음 턴 =====
+      // 다음 턴
       u.battleTurn++;
       const nextAction = getEnemyAction(m);
       u.nextAction = nextAction;
@@ -1192,18 +1471,16 @@ module.exports = async (req, res) => {
       if (!m.isBoss) buttons.push('도망');
       
       return res.json(reply(
-        `${log}\n` +
-        `━━━ Turn ${u.battleTurn} ━━━\n` +
+        `${log}\n━━ Turn ${u.battleTurn} ━━\n` +
         `👹 ${m.name}: ${m.hp}/${m.maxHp}\n` +
-        `❤️ HP: ${u.hp}/${c.maxHp}\n` +
-        `⚡ Focus: ${u.focus}/${u.maxFocus}\n` +
-        (u.skillCd > 0 ? `🔄 스킬 CD: ${u.skillCd}\n` : '') +
+        `❤️ ${u.hp}/${c.maxHp} | ⚡ ${u.focus}\n` +
+        (u.skillCd > 0 ? `🔄 CD: ${u.skillCd}\n` : '') +
         `\n📢 ${nextAction.text}\n└ ${nextAction.hint}`,
         buttons
       ));
     }
 
-    return res.json(reply('🏔️ 에테르의 탑', ['시작', '랭킹']));
+    return res.json(reply('🏔️ 에테르의 탑', ['시작', '랭킹', '도움말']));
     
   } catch (e) {
     console.error(e);

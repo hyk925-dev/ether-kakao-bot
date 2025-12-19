@@ -2,6 +2,12 @@ const http = require('http');
 const webhook = require('./api/webhook');
 
 const server = http.createServer(async (req, res) => {
+  // res.json 함수 추가
+  res.json = (data) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(data));
+  };
+
   if (req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
@@ -10,6 +16,7 @@ const server = http.createServer(async (req, res) => {
         req.body = JSON.parse(body);
         await webhook(req, res);
       } catch (e) {
+        console.error(e);
         res.writeHead(500);
         res.end('Error');
       }

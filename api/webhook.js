@@ -50,7 +50,7 @@ const JOBS = {
 };
 
 // ============================================
-// 몬스터 시스템 (타입별 특성 + 등급)
+// 몬스터 시스템
 // ============================================
 const MONSTER_TYPES = {
   beast: { name: '야수', hpMult: 1.0, atkMult: 1.4, defMult: 0.6, evasion: 12 },
@@ -111,6 +111,16 @@ const ITEM_PROCS = [
 ];
 
 // ============================================
+// 강화 시스템
+// ============================================
+const ENHANCE_RATES = {
+  1: 90, 2: 85, 3: 75, 4: 60, 5: 45,
+  6: 35, 7: 25, 8: 18, 9: 12, 10: 8
+};
+const ENHANCE_COST = (lv) => Math.floor(50 + lv * 30 + Math.pow(lv, 2) * 10);
+const ENHANCE_BONUS = 0.12; // 강화 1당 12% 스탯 증가
+
+// ============================================
 // 유틸리티 함수
 // ============================================
 const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
@@ -123,6 +133,22 @@ async function getUser(id) {
 
 async function saveUser(id, data) {
   await db.collection('users').doc(id).set(data, { merge: true });
+}
+
+async function getUserByName(name) {
+  const snapshot = await db.collection('users').where('name', '==', name).limit(1).get();
+  if (snapshot.empty) return null;
+  const doc = snapshot.docs[0];
+  return { id: doc.id, ...doc.data() };
+}
+
+async function getTopUsers(field, limit = 10) {
+  const snapshot = await db.collection('users')
+    .where('phase', '==', 'town')
+    .orderBy(field, 'desc')
+    .limit(limit)
+    .get();
+  return snapshot.docs.map((doc, i) => ({ rank: i + 1, ...doc.data() }));
 }
 
 // ============================================
@@ -139,22 +165,20 @@ function calcStats(p) {
   let critRate = 5 + s.dex * 0.6 + s.luk * 0.4;
   let interpret = 10 + s.int * 2.5 + s.wil * 0.5;
   
-  // 직업 보너스
   if (job?.id === 'scribe') interpret += 12;
   
-  // 장비 보너스
   ['weapon', 'armor', 'accessory'].forEach(slot => {
     const item = p.equipment?.[slot];
     if (!item) return;
-    atk += item.stats?.atk || 0;
-    def += item.stats?.def || 0;
-    maxHp += item.stats?.maxHp || 0;
-    evasion += item.stats?.evasion || 0;
-    critRate += item.stats?.critRate || 0;
-    interpret += item.stats?.interpret || 0;
+    const enhMult = 1 + (item.enhance || 0) * ENHANCE_BONUS;
+    atk += Math.floor((item.stats?.atk || 0) * enhMult);
+    def += Math.floor((item.stats?.def || 0) * enhMult);
+    maxHp += Math.floor((item.stats?.maxHp || 0) * enhMult);
+    evasion += Math.floor((item.stats?.evasion || 0) * enhMult);
+    critRate += Math.floor((item.stats?.critRate || 0) * enhMult);
+    interpret += Math.floor((item.stats?.interpret || 0) * enhMult);
   });
   
-  // 방랑자 패시브
   if (p.job === 'wanderer' && p.hp < maxHp * 0.4) atk *= 1.25;
   
   return {
@@ -165,6 +189,11 @@ function calcStats(p) {
     critRate: clamp(Math.floor(critRate), 0, 95),
     interpret: clamp(Math.floor(interpret), 0, 98)
   };
+}
+
+function calcPower(p) {
+  const c = calcStats(p);
+  return Math.floor(c.atk * 2 + c.def * 1.5 + c.maxHp * 0.1 + c.critRate * 3 + c.interpret * 2 + p.lv * 10);
 }
 
 // ============================================
@@ -181,27 +210,18 @@ function determineGrade(floor) {
 }
 
 function spawnMonster(floor) {
-  // 보스 체크
   if (BOSSES[floor]) {
     const boss = BOSSES[floor];
     const t = MONSTER_TYPES[boss.type];
     return {
       name: `⭐${boss.name}⭐`,
-      type: boss.type,
-      typeName: t.name,
-      hp: boss.hp,
-      maxHp: boss.hp,
-      atk: boss.atk,
-      def: boss.def,
-      evasion: t.evasion + 8,
-      exp: boss.exp,
-      gold: boss.gold,
-      grade: 5,
-      isBoss: true
+      type: boss.type, typeName: t.name,
+      hp: boss.hp, maxHp: boss.hp, atk: boss.atk, def: boss.def,
+      evasion: t.evasion + 8, exp: boss.exp, gold: boss.gold,
+      grade: 5, isBoss: true
     };
   }
   
-  // 일반 몬스터
   const pool = BASE_MONSTERS.filter(m => m.minFloor <= floor);
   const base = pool[Math.floor(Math.random() * pool.length)];
   const grade = determineGrade(floor);
@@ -211,8 +231,7 @@ function spawnMonster(floor) {
   
   return {
     name: grade > 1 ? `${g.name} ${base.name}` : base.name,
-    type: base.type,
-    typeName: t.name,
+    type: base.type, typeName: t.name,
     hp: Math.floor(base.hp * t.hpMult * g.mult * floorMult),
     maxHp: Math.floor(base.hp * t.hpMult * g.mult * floorMult),
     atk: Math.floor(base.atk * t.atkMult * g.mult * floorMult),
@@ -220,8 +239,7 @@ function spawnMonster(floor) {
     evasion: t.evasion,
     exp: Math.floor(base.exp * g.expMult * floorMult),
     gold: Math.floor(base.exp * 0.7 * g.expMult * floorMult),
-    grade,
-    isBoss: false
+    grade, isBoss: false
   };
 }
 
@@ -232,7 +250,6 @@ function generateItem(monsterGrade, floor, madnessOpen = false) {
   const baseChance = 0.35 + (madnessOpen ? 0.20 : 0);
   if (Math.random() > baseChance) return null;
   
-  // 등급 결정
   let grade = 1;
   const roll = Math.random() * 100;
   if (roll < 2) grade = 5;
@@ -254,12 +271,10 @@ function generateItem(monsterGrade, floor, madnessOpen = false) {
   if (slot.mainStat === 'evasion') stats.evasion = mainVal;
   else stats[slot.mainStat] = mainVal;
   
-  // 추가 스탯
   if (grade >= 2 && Math.random() < 0.6) stats.critRate += Math.floor(grade * 0.8);
   if (grade >= 3 && Math.random() < 0.5) stats.interpret += Math.floor(grade * 1.0);
   if (grade >= 4 && Math.random() < 0.4) stats.maxHp += Math.floor(grade * 8);
   
-  // 프로시저 (특수효과)
   let proc = null;
   const procs = ITEM_PROCS.filter(p => p.slot === slotKey);
   if (procs.length && Math.random() < 0.08 + grade * 0.07) {
@@ -269,42 +284,98 @@ function generateItem(monsterGrade, floor, madnessOpen = false) {
   return {
     id: Date.now() + Math.random(),
     name: `${gd.prefix} ${itemType}${proc ? ` [${proc.name}]` : ''}`,
-    slot: slotKey,
-    slotName: slot.name,
-    grade,
-    gradeName: gd.name,
-    stats,
-    proc
+    slot: slotKey, slotName: slot.name,
+    grade, gradeName: gd.name, stats, proc,
+    enhance: 0
   };
 }
 
 function getItemStatText(item) {
   const st = [];
-  if (item.stats.atk) st.push(`공+${item.stats.atk}`);
-  if (item.stats.def) st.push(`방+${item.stats.def}`);
-  if (item.stats.maxHp) st.push(`HP+${item.stats.maxHp}`);
-  if (item.stats.evasion) st.push(`회피+${item.stats.evasion}`);
-  if (item.stats.critRate) st.push(`크리+${item.stats.critRate}`);
-  if (item.stats.interpret) st.push(`해석+${item.stats.interpret}`);
+  const enhMult = 1 + (item.enhance || 0) * ENHANCE_BONUS;
+  if (item.stats.atk) st.push(`공+${Math.floor(item.stats.atk * enhMult)}`);
+  if (item.stats.def) st.push(`방+${Math.floor(item.stats.def * enhMult)}`);
+  if (item.stats.maxHp) st.push(`HP+${Math.floor(item.stats.maxHp * enhMult)}`);
+  if (item.stats.evasion) st.push(`회피+${Math.floor(item.stats.evasion * enhMult)}`);
+  if (item.stats.critRate) st.push(`크리+${Math.floor(item.stats.critRate * enhMult)}`);
+  if (item.stats.interpret) st.push(`해석+${Math.floor(item.stats.interpret * enhMult)}`);
   return st.join(' ') || '효과 없음';
 }
 
+function getItemDisplay(item) {
+  const enh = item.enhance > 0 ? `+${item.enhance} ` : '';
+  return `${enh}${item.name}`;
+}
+
 // ============================================
-// 적 행동 결정 (전조 시스템)
+// 적 행동 결정
 // ============================================
 function getEnemyAction(enemy) {
   const r = Math.random() * 100;
-  
   if (enemy.isBoss) {
-    if (r < 15) return { type: 'special', mult: 2.5, text: '⚠️ 필살기 준비!', hint: '회피 또는 방어 필수!' };
+    if (r < 15) return { type: 'special', mult: 2.5, text: '⚠️ 필살기 준비!', hint: '회피/방어 필수!' };
     if (r < 45) return { type: 'heavy', mult: 1.8, text: '⚠️ 강공격 준비', hint: '해석하면 크리 확정' };
     if (r < 75) return { type: 'attack', mult: 1.2, text: '공격 준비', hint: '일반 공격' };
     return { type: 'buff', mult: 2.0, text: '힘을 모으는 중...', hint: '다음 공격 강화' };
   }
-  
   if (r < 50) return { type: 'attack', mult: 1.0, text: '공격 준비', hint: '일반 공격' };
   if (r < 80) return { type: 'heavy', mult: 1.6, text: '⚠️ 강공격!', hint: '해석/회피 추천' };
   return { type: 'heal', mult: 0.15, text: '회복 중...', hint: '지금 공격!' };
+}
+
+// ============================================
+// PvP 결투 시뮬레이션
+// ============================================
+function simulateDuel(p1, p2) {
+  const s1 = calcStats(p1);
+  const s2 = calcStats(p2);
+  
+  let hp1 = s1.maxHp, hp2 = s2.maxHp;
+  let log = [];
+  let turn = 0;
+  
+  while (hp1 > 0 && hp2 > 0 && turn < 20) {
+    turn++;
+    
+    // P1 공격
+    let dmg1 = Math.max(1, s1.atk - s2.def * 0.4);
+    const crit1 = Math.random() * 100 < s1.critRate;
+    const dodge2 = Math.random() * 100 < s2.evasion;
+    
+    if (dodge2) {
+      log.push(`${p2.name} 회피!`);
+    } else {
+      if (crit1) dmg1 *= 2;
+      hp2 -= Math.floor(dmg1);
+      log.push(`${p1.name} → ${p2.name}: ${Math.floor(dmg1)}${crit1 ? '💥' : ''}`);
+    }
+    
+    if (hp2 <= 0) break;
+    
+    // P2 공격
+    let dmg2 = Math.max(1, s2.atk - s1.def * 0.4);
+    const crit2 = Math.random() * 100 < s2.critRate;
+    const dodge1 = Math.random() * 100 < s1.evasion;
+    
+    if (dodge1) {
+      log.push(`${p1.name} 회피!`);
+    } else {
+      if (crit2) dmg2 *= 2;
+      hp1 -= Math.floor(dmg2);
+      log.push(`${p2.name} → ${p1.name}: ${Math.floor(dmg2)}${crit2 ? '💥' : ''}`);
+    }
+  }
+  
+  const winner = hp1 > hp2 ? p1 : p2;
+  const loser = hp1 > hp2 ? p2 : p1;
+  
+  return {
+    winner, loser,
+    hp1: Math.max(0, hp1),
+    hp2: Math.max(0, hp2),
+    turns: turn,
+    log: log.slice(-6) // 마지막 6턴만
+  };
 }
 
 // ============================================
@@ -313,19 +384,13 @@ function getEnemyAction(enemy) {
 function reply(text, buttons = []) {
   const response = {
     version: '2.0',
-    template: {
-      outputs: [{ simpleText: { text } }]
-    }
+    template: { outputs: [{ simpleText: { text } }] }
   };
-  
   if (buttons.length > 0) {
     response.template.quickReplies = buttons.map(b => ({
-      label: b,
-      action: 'message',
-      messageText: b
+      label: b, action: 'message', messageText: b
     }));
   }
-  
   return response;
 }
 
@@ -333,7 +398,7 @@ function reply(text, buttons = []) {
 // 메인 핸들러
 // ============================================
 module.exports = async (req, res) => {
-  if (req.method !== 'POST') return res.json({ message: 'ETHER v2.0 OK' });
+  if (req.method !== 'POST') return res.json({ message: 'ETHER v2.1 OK' });
 
   try {
     const userId = req.body?.userRequest?.user?.id;
@@ -342,13 +407,132 @@ module.exports = async (req, res) => {
 
     let u = await getUser(userId);
 
+    // ==================== 소셜 커맨드 (로그인 전에도 사용 가능) ====================
+    
+    // @랭킹
+    if (msg === '@랭킹' || msg === '랭킹') {
+      const floorRank = await getTopUsers('floor', 10);
+      let text = '🏆 에테르의 탑 랭킹\n\n';
+      text += '━━ 🏔️ 층수 TOP 10 ━━\n';
+      floorRank.forEach(u => {
+        const job = JOBS[u.job];
+        text += `${u.rank}. ${job?.icon || ''}${u.name} Lv.${u.lv} (${u.floor}층)\n`;
+      });
+      return res.json(reply(text, u ? ['전투', '상태', '@자랑'] : ['시작']));
+    }
+    
+    // @전투력랭킹
+    if (msg === '@전투력' || msg === '전투력랭킹') {
+      const snapshot = await db.collection('users').where('phase', '==', 'town').get();
+      const users = snapshot.docs.map(doc => ({ ...doc.data() }));
+      users.forEach(u => u.power = calcPower(u));
+      users.sort((a, b) => b.power - a.power);
+      
+      let text = '🏆 전투력 랭킹\n\n';
+      users.slice(0, 10).forEach((u, i) => {
+        const job = JOBS[u.job];
+        text += `${i + 1}. ${job?.icon || ''}${u.name} - ${u.power}⚔️\n`;
+      });
+      return res.json(reply(text, u ? ['전투', '상태', '@자랑'] : ['시작']));
+    }
+
     // ==================== 신규 유저 ====================
     if (!u) {
       if (msg === '시작') {
         await saveUser(userId, { phase: 'naming' });
         return res.json(reply('🌫️ 회색 안개 속에서 눈을 떴다...\n\n당신의 이름은?'));
       }
-      return res.json(reply('🏔️ 에테르의 탑\n\n[시작]을 눌러 게임을 시작하세요.', ['시작']));
+      return res.json(reply('🏔️ 에테르의 탑\n\n[시작]을 눌러 게임을 시작하세요.', ['시작', '랭킹']));
+    }
+
+    // ==================== @자랑 ====================
+    if (msg === '@자랑' || msg === '자랑') {
+      const c = calcStats(u);
+      const job = JOBS[u.job];
+      const power = calcPower(u);
+      
+      let text = `📜 ${u.name}의 모험 기록\n`;
+      text += `━━━━━━━━━━━━━━━\n`;
+      text += `${job?.icon || ''} ${job?.name || '무직'} Lv.${u.lv}\n`;
+      text += `🏔️ ${u.floor}층 도달\n`;
+      text += `⚔️ 전투력: ${power}\n\n`;
+      text += `❤️ HP: ${c.maxHp}\n`;
+      text += `⚔️ 공격: ${c.atk} | 🛡️ 방어: ${c.def}\n`;
+      text += `💨 회피: ${c.evasion}% | 💥 크리: ${c.critRate}%\n`;
+      text += `👁 해석: ${c.interpret}%\n\n`;
+      
+      text += `📦 장비\n`;
+      ['weapon', 'armor', 'accessory'].forEach(slot => {
+        const item = u.equipment?.[slot];
+        if (item) {
+          text += `└ ${getItemDisplay(item)}\n`;
+        }
+      });
+      
+      text += `\n💰 ${u.gold}G | 🌀 광기: ${u.madness || 0}`;
+      
+      return res.json(reply(text, ['전투', '랭킹', '@결투']));
+    }
+    
+    // ==================== @결투 ====================
+    if (msg.startsWith('@결투 ') || msg.startsWith('결투 ')) {
+      const targetName = msg.replace('@결투 ', '').replace('결투 ', '').trim();
+      
+      if (!targetName) {
+        return res.json(reply('결투할 상대의 이름을 입력하세요.\n예: @결투 홍길동', ['돌아가기']));
+      }
+      
+      if (targetName === u.name) {
+        return res.json(reply('자기 자신과는 결투할 수 없습니다!', ['돌아가기']));
+      }
+      
+      const target = await getUserByName(targetName);
+      if (!target) {
+        return res.json(reply(`"${targetName}" 플레이어를 찾을 수 없습니다.`, ['돌아가기']));
+      }
+      
+      // 결투 비용
+      const duelCost = 50;
+      if (u.gold < duelCost) {
+        return res.json(reply(`결투 비용이 부족합니다. (${duelCost}G 필요)`, ['돌아가기']));
+      }
+      
+      u.gold -= duelCost;
+      
+      // 결투 시뮬레이션
+      const result = simulateDuel(u, target);
+      const isWinner = result.winner.name === u.name;
+      
+      // 보상/페널티
+      const reward = Math.floor(50 + target.lv * 10);
+      if (isWinner) {
+        u.gold += reward;
+        u.duelWins = (u.duelWins || 0) + 1;
+      } else {
+        u.duelLosses = (u.duelLosses || 0) + 1;
+      }
+      
+      await saveUser(userId, u);
+      
+      let text = `⚔️ 결투! ${u.name} vs ${target.name}\n`;
+      text += `━━━━━━━━━━━━━━━\n\n`;
+      result.log.forEach(l => text += `${l}\n`);
+      text += `\n━━━━━━━━━━━━━━━\n`;
+      text += `${result.winner.name} 승리! (${result.turns}턴)\n\n`;
+      
+      if (isWinner) {
+        text += `🎉 승리 보상: +${reward}G\n`;
+      } else {
+        text += `💀 패배...\n`;
+      }
+      
+      text += `\n📊 전적: ${u.duelWins || 0}승 ${u.duelLosses || 0}패`;
+      
+      return res.json(reply(text, ['전투', '상태', '@결투', '랭킹']));
+    }
+    
+    if (msg === '@결투') {
+      return res.json(reply('결투할 상대의 이름을 입력하세요.\n예: @결투 홍길동\n\n비용: 50G', ['돌아가기']));
     }
 
     // ==================== 이름 입력 ====================
@@ -356,6 +540,13 @@ module.exports = async (req, res) => {
       if (msg.length < 1 || msg.length > 8) {
         return res.json(reply('이름은 1~8자로 입력해주세요.'));
       }
+      
+      // 중복 체크
+      const existing = await getUserByName(msg);
+      if (existing) {
+        return res.json(reply('이미 사용 중인 이름입니다. 다른 이름을 입력해주세요.'));
+      }
+      
       await saveUser(userId, { ...u, phase: 'job', name: msg });
       
       let jobList = '직업을 선택하세요:\n\n';
@@ -381,24 +572,13 @@ module.exports = async (req, res) => {
       const c = calcStats({ stats, job: jobId, equipment: {} });
       
       await saveUser(userId, {
-        phase: 'town',
-        name: u.name,
-        job: jobId,
-        lv: 1,
-        exp: 0,
-        gold: 150,
-        floor: 1,
-        maxFloor: 1,
-        stats,
-        hp: c.maxHp,
-        maxHp: c.maxHp,
-        focus: 60,
-        maxFocus: 100,
-        madness: 0,
+        phase: 'town', name: u.name, job: jobId,
+        lv: 1, exp: 0, gold: 150, floor: 1, maxFloor: 1,
+        stats, hp: c.maxHp, maxHp: c.maxHp,
+        focus: 60, maxFocus: 100, madness: 0,
         equipment: { weapon: null, armor: null, accessory: null },
-        inventory: [],
-        skillCd: 0,
-        potions: 2
+        inventory: [], skillCd: 0, potions: 2,
+        duelWins: 0, duelLosses: 0
       });
       
       return res.json(reply(
@@ -418,24 +598,17 @@ module.exports = async (req, res) => {
       const job = JOBS[u.job];
       const isBoss = BOSSES[u.floor] !== undefined;
       
+      // 전투 시작
       if (msg === '전투' || msg === '광기전투') {
         const madnessOpen = msg === '광기전투';
         const monster = spawnMonster(u.floor);
         const action = getEnemyAction(monster);
         
         await saveUser(userId, {
-          ...u,
-          phase: 'battle',
-          monster,
-          nextAction: action,
-          battleTurn: 1,
-          madnessOpen,
-          interpretBonus: 0,
-          isDefending: false,
-          critBoost: 0,
-          bleedTurns: 0,
-          shamanDR: 0,
-          ironDRTurns: 0
+          ...u, phase: 'battle', monster, nextAction: action,
+          battleTurn: 1, madnessOpen, interpretBonus: 0,
+          isDefending: false, critBoost: 0, bleedTurns: 0,
+          shamanDR: 0, ironDRTurns: 0
         });
         
         let battleText = madnessOpen ? '🌀 광기 개방!\n\n' : '';
@@ -454,11 +627,14 @@ module.exports = async (req, res) => {
         return res.json(reply(battleText, ['공격', '회피', '해석', '방어', '스킬', '물약']));
       }
       
+      // 상태
       if (msg === '상태') {
         const req = getReqExp(u.lv);
+        const power = calcPower(u);
         return res.json(reply(
           `📊 ${u.name} Lv.${u.lv}\n` +
           `${job.icon} ${job.name}\n\n` +
+          `⚔️ 전투력: ${power}\n` +
           `❤️ HP: ${u.hp}/${c.maxHp}\n` +
           `⚡ Focus: ${u.focus}/${u.maxFocus}\n` +
           `🌀 광기: ${u.madness || 0}/100\n\n` +
@@ -467,18 +643,20 @@ module.exports = async (req, res) => {
           `👁 해석: ${c.interpret}%\n\n` +
           `📈 EXP: ${u.exp}/${req}\n` +
           `💰 ${u.gold}G | 🏔️ ${u.floor}층${isBoss ? ' ⭐' : ''}\n` +
-          `🧪 물약: ${u.potions || 0}개`,
-          ['전투', '장비', '상점', '휴식']
+          `🧪 물약: ${u.potions || 0}개\n` +
+          `📊 결투: ${u.duelWins || 0}승 ${u.duelLosses || 0}패`,
+          ['전투', '장비', '상점', '휴식', '@자랑', '랭킹']
         ));
       }
       
+      // 장비
       if (msg === '장비') {
         let equipText = `🎒 장착 장비\n\n`;
         ['weapon', 'armor', 'accessory'].forEach(slot => {
           const item = u.equipment?.[slot];
           const slotName = ITEM_TYPES[slot].name;
           if (item) {
-            equipText += `${slotName}: ${item.name}\n└ ${getItemStatText(item)}\n`;
+            equipText += `${slotName}: ${getItemDisplay(item)}\n└ ${getItemStatText(item)}\n`;
           } else {
             equipText += `${slotName}: (없음)\n`;
           }
@@ -488,17 +666,22 @@ module.exports = async (req, res) => {
         if (inv.length > 0) {
           equipText += `\n📦 인벤토리 (${inv.length}개)\n`;
           inv.slice(0, 5).forEach((item, i) => {
-            equipText += `${i + 1}. ${item.name}\n`;
+            equipText += `${i + 1}. ${getItemDisplay(item)} [${item.gradeName}]\n`;
           });
           if (inv.length > 5) equipText += `...외 ${inv.length - 5}개`;
         }
         
         const buttons = ['돌아가기'];
-        if (inv.length > 0) buttons.unshift('장착1', '장착2', '장착3', '판매1');
+        if (inv.length > 0) buttons.unshift('장착1', '판매1');
+        
+        // 강화 가능한 장비 체크
+        const hasEquip = Object.values(u.equipment || {}).some(e => e !== null);
+        if (hasEquip) buttons.push('강화');
         
         return res.json(reply(equipText, buttons));
       }
       
+      // 장착
       if (msg.startsWith('장착')) {
         const idx = parseInt(msg.replace('장착', '')) - 1;
         const inv = u.inventory || [];
@@ -509,15 +692,15 @@ module.exports = async (req, res) => {
         const item = inv[idx];
         const oldItem = u.equipment[item.slot];
         
-        // 교체
         u.equipment[item.slot] = item;
         u.inventory = inv.filter((_, i) => i !== idx);
         if (oldItem) u.inventory.push(oldItem);
         
         await saveUser(userId, u);
-        return res.json(reply(`✅ ${item.name} 장착!\n${getItemStatText(item)}`, ['장비', '돌아가기']));
+        return res.json(reply(`✅ ${getItemDisplay(item)} 장착!\n${getItemStatText(item)}`, ['장비', '돌아가기']));
       }
       
+      // 판매
       if (msg.startsWith('판매')) {
         const idx = parseInt(msg.replace('판매', '')) - 1;
         const inv = u.inventory || [];
@@ -526,14 +709,106 @@ module.exports = async (req, res) => {
         }
         
         const item = inv[idx];
-        const price = Math.floor(item.grade * 15 + 10);
+        const price = Math.floor((item.grade * 15 + 10) * (1 + (item.enhance || 0) * 0.5));
         u.inventory = inv.filter((_, i) => i !== idx);
         u.gold += price;
         
         await saveUser(userId, u);
-        return res.json(reply(`💰 ${item.name} 판매!\n+${price}G`, ['장비', '돌아가기']));
+        return res.json(reply(`💰 ${getItemDisplay(item)} 판매!\n+${price}G`, ['장비', '돌아가기']));
       }
       
+      // ========== 강화 시스템 ==========
+      if (msg === '강화') {
+        let text = '🔨 강화할 장비를 선택하세요.\n\n';
+        const buttons = [];
+        
+        ['weapon', 'armor', 'accessory'].forEach((slot, i) => {
+          const item = u.equipment?.[slot];
+          if (item) {
+            const enh = item.enhance || 0;
+            const cost = ENHANCE_COST(enh);
+            const rate = ENHANCE_RATES[enh + 1] || 5;
+            text += `${i + 1}. ${getItemDisplay(item)}\n`;
+            text += `   └ 다음: +${enh + 1} (${rate}%) - ${cost}G\n\n`;
+            buttons.push(`강화${i + 1}`);
+          }
+        });
+        
+        if (buttons.length === 0) {
+          return res.json(reply('강화할 장비가 없습니다.', ['장비', '돌아가기']));
+        }
+        
+        buttons.push('돌아가기');
+        return res.json(reply(text, buttons));
+      }
+      
+      if (msg.startsWith('강화')) {
+        const idx = parseInt(msg.replace('강화', '')) - 1;
+        const slots = ['weapon', 'armor', 'accessory'];
+        
+        if (idx < 0 || idx >= slots.length) {
+          return res.json(reply('잘못된 번호입니다.', ['강화', '돌아가기']));
+        }
+        
+        const slot = slots[idx];
+        const item = u.equipment?.[slot];
+        
+        if (!item) {
+          return res.json(reply('해당 슬롯에 장비가 없습니다.', ['강화', '돌아가기']));
+        }
+        
+        const enh = item.enhance || 0;
+        if (enh >= 10) {
+          return res.json(reply('이미 최대 강화입니다! (+10)', ['강화', '돌아가기']));
+        }
+        
+        const cost = ENHANCE_COST(enh);
+        const rate = ENHANCE_RATES[enh + 1] || 5;
+        
+        if (u.gold < cost) {
+          return res.json(reply(`골드가 부족합니다. (${cost}G 필요)`, ['강화', '돌아가기']));
+        }
+        
+        u.gold -= cost;
+        const success = Math.random() * 100 < rate;
+        
+        if (success) {
+          item.enhance = enh + 1;
+          await saveUser(userId, u);
+          return res.json(reply(
+            `🎉 강화 성공!\n\n` +
+            `${getItemDisplay(item)}\n` +
+            `${getItemStatText(item)}\n\n` +
+            `-${cost}G`,
+            ['강화', '장비', '돌아가기']
+          ));
+        } else {
+          // 실패 시 파괴 확률 (강화 수치에 따라)
+          const destroyChance = enh >= 7 ? 30 : (enh >= 5 ? 15 : 0);
+          const destroyed = Math.random() * 100 < destroyChance;
+          
+          if (destroyed) {
+            u.equipment[slot] = null;
+            await saveUser(userId, u);
+            return res.json(reply(
+              `💥 강화 실패... 장비 파괴!\n\n` +
+              `${item.name}이(가) 사라졌습니다...\n\n` +
+              `-${cost}G`,
+              ['장비', '돌아가기']
+            ));
+          } else {
+            await saveUser(userId, u);
+            return res.json(reply(
+              `❌ 강화 실패...\n\n` +
+              `${getItemDisplay(item)} 유지\n\n` +
+              `-${cost}G`,
+              ['강화', '장비', '돌아가기']
+            ));
+          }
+        }
+      }
+      
+      // 상점
       if (msg === '상점') {
         const potionCost = 40 + u.floor * 2;
         return res.json(reply(
@@ -563,11 +838,11 @@ module.exports = async (req, res) => {
         return res.json(reply(`💊 고급물약 구매! (-${cost}G)\n보유: ${u.hiPotions}개`, ['상점', '돌아가기']));
       }
       
+      // 휴식
       if (msg === '휴식') {
         const cost = 30 + u.floor * 5;
         if (u.gold < cost) return res.json(reply(`골드 부족 (${cost}G 필요)`, ['전투', '상태']));
         
-        // 15% 습격 확률
         if (Math.random() < 0.15) {
           u.gold -= Math.floor(cost / 2);
           u.madness = clamp((u.madness || 0) + 10, 0, 100);
@@ -575,23 +850,14 @@ module.exports = async (req, res) => {
           const action = getEnemyAction(monster);
           
           await saveUser(userId, {
-            ...u,
-            phase: 'battle',
-            monster,
-            nextAction: action,
-            battleTurn: 1,
-            madnessOpen: false,
-            interpretBonus: 0,
-            isDefending: false,
-            critBoost: 0,
-            bleedTurns: 0,
-            shamanDR: 0,
-            ironDRTurns: 0
+            ...u, phase: 'battle', monster, nextAction: action,
+            battleTurn: 1, madnessOpen: false, interpretBonus: 0,
+            isDefending: false, critBoost: 0, bleedTurns: 0,
+            shamanDR: 0, ironDRTurns: 0
           });
           
           return res.json(reply(
-            `💀 휴식 중 습격!\n\n${monster.name} 출현!\n\n` +
-            `📢 ${action.text}`,
+            `💀 휴식 중 습격!\n\n${monster.name} 출현!\n\n📢 ${action.text}`,
             ['공격', '회피', '해석', '방어', '스킬', '물약']
           ));
         }
@@ -625,7 +891,7 @@ module.exports = async (req, res) => {
         `🏔️ ${u.floor}층${isBoss ? ' ⭐보스⭐' : ''}\n\n` +
         `❤️ ${u.hp}/${c.maxHp} | ⚡ ${u.focus}/${u.maxFocus}\n` +
         `🌀 광기: ${u.madness || 0} | 💰 ${u.gold}G`,
-        ['전투', '광기전투', '상태', '장비', '상점', '휴식']
+        ['전투', '광기전투', '상태', '장비', '상점', '휴식', '랭킹']
       ));
     }
 
@@ -637,7 +903,6 @@ module.exports = async (req, res) => {
       const eAction = u.nextAction;
       let log = '';
       
-      // 출혈 데미지
       if (u.bleedTurns > 0) {
         const bd = Math.floor(m.maxHp * 0.05);
         m.hp -= bd;
@@ -646,7 +911,6 @@ module.exports = async (req, res) => {
       }
       
       // ===== 플레이어 행동 =====
-      
       if (msg === '공격') {
         let dmg = Math.max(1, c.atk - m.def * 0.4);
         const critChance = c.critRate + (u.interpretBonus || 0) + (u.critBoost || 0);
@@ -660,7 +924,6 @@ module.exports = async (req, res) => {
           log += `⚔️ ${dmg} 데미지!\n`;
         }
         
-        // 무기 프로시저
         const weapon = u.equipment?.weapon;
         if (weapon?.proc?.id === 'bleed' && Math.random() < 0.18) {
           u.bleedTurns = 3;
@@ -682,8 +945,6 @@ module.exports = async (req, res) => {
         if (Math.random() * 100 < dodgeChance) {
           log += `💨 회피 성공!\n`;
           eAction.type = 'dodged';
-          
-          // 사냥꾼 패시브
           if (u.job === 'hunter') {
             u.critBoost = 35;
             log += `🏹 크리티컬 +35%!\n`;
@@ -698,8 +959,6 @@ module.exports = async (req, res) => {
         if (Math.random() * 100 < c.interpret) {
           u.interpretBonus = 35;
           log += `👁 해석 성공! 크리+35%\n`;
-          
-          // 주술사 패시브
           if (u.job === 'shaman') {
             u.shamanDR = 0.25;
             log += `👁 받는 피해 -25%\n`;
@@ -712,8 +971,6 @@ module.exports = async (req, res) => {
       else if (msg === '방어') {
         u.isDefending = true;
         log += `🛡️ 방어 태세!\n`;
-        
-        // 철혈병 패시브
         if (u.job === 'ironblood' && Math.random() < 0.5) {
           const counter = Math.floor(c.atk * 0.5);
           m.hp -= counter;
@@ -770,8 +1027,6 @@ module.exports = async (req, res) => {
         if ((u.potions || 0) <= 0 && (u.hiPotions || 0) <= 0) {
           return res.json(reply('물약이 없습니다!', ['공격', '회피', '해석', '방어', '스킬']));
         }
-        
-        // 고급물약 우선 (HP 50% 이하일 때)
         if ((u.hiPotions || 0) > 0 && u.hp < c.maxHp * 0.5) {
           u.hiPotions--;
           u.hp = c.maxHp;
@@ -786,7 +1041,6 @@ module.exports = async (req, res) => {
       
       else if (msg === '도망') {
         if (m.isBoss) return res.json(reply('보스에게서 도망칠 수 없습니다!', ['공격', '회피', '해석', '방어', '스킬', '물약']));
-        
         const fleeChance = clamp(40 + c.evasion * 0.8 - m.grade * 5, 10, 75);
         if (Math.random() * 100 < fleeChance) {
           const goldLoss = Math.floor(u.gold * 0.05);
@@ -805,8 +1059,6 @@ module.exports = async (req, res) => {
       // ===== 몬스터 처치 체크 =====
       if (m.hp <= 0) {
         m.hp = 0;
-        
-        // 보상 계산
         const expGain = m.exp;
         const goldMult = u.equipment?.accessory?.proc?.id === 'lucky' ? 1.2 : 1.0;
         const goldGain = Math.floor(m.gold * goldMult);
@@ -818,7 +1070,6 @@ module.exports = async (req, res) => {
         log += `\n🎉 ${m.name} 처치!\n`;
         log += `+${expGain} EXP, +${goldGain} G\n`;
         
-        // 레벨업 체크
         const req = getReqExp(u.lv);
         if (u.exp >= req) {
           u.exp -= req;
@@ -831,18 +1082,14 @@ module.exports = async (req, res) => {
           log += `\n🎉 LEVEL UP! Lv.${u.lv}\n`;
         }
         
-        // 층 상승
         if (m.isBoss || Math.random() < 0.7) {
           u.floor++;
           if (u.floor > u.maxFloor) u.maxFloor = u.floor;
           log += `🏔️ ${u.floor}층 도달!\n`;
         }
         
-        // 아이템 드랍
-        const dropMult = u.madnessOpen ? 2.5 : 1.0;
         const drops = m.isBoss ? 3 : 1;
         let gotItems = [];
-        
         for (let i = 0; i < drops; i++) {
           const item = generateItem(m.grade, u.floor, u.madnessOpen);
           if (item) {
@@ -866,30 +1113,21 @@ module.exports = async (req, res) => {
       if (eAction.type !== 'dodged' && eAction.type !== 'jammed') {
         let eDmg = Math.floor(m.atk * (eAction.mult || 1));
         
-        // 방어 감소
         if (u.isDefending) eDmg = Math.floor(eDmg * 0.5);
-        
-        // 주술사 피해 감소
         if (u.shamanDR > 0) {
           eDmg = Math.floor(eDmg * (1 - u.shamanDR));
           u.shamanDR = 0;
         }
-        
-        // 철혈병 피해 감소
         if (u.ironDRTurns > 0) {
           eDmg = Math.floor(eDmg * 0.6);
           u.ironDRTurns--;
-          
-          // 가시 반사
           const reflect = Math.floor(eDmg * 0.3);
           m.hp -= reflect;
           log += `🌵 가시 반사 ${reflect}!\n`;
         }
         
-        // 방어력 적용
         eDmg = Math.max(1, eDmg - c.def * 0.35);
         
-        // 방어구 프로시저
         const armor = u.equipment?.armor;
         if (armor?.proc?.id === 'barrier' && Math.random() < 0.3) {
           const block = Math.floor(c.maxHp * 0.15);
@@ -918,14 +1156,10 @@ module.exports = async (req, res) => {
       }
       
       u.isDefending = false;
-      
-      // Focus 회복
       u.focus = Math.min(u.maxFocus, (u.focus || 0) + 10);
-      
-      // 스킬 쿨다운 감소
       if (u.skillCd > 0) u.skillCd--;
       
-      // ===== 플레이어 사망 체크 =====
+      // ===== 플레이어 사망 =====
       if (u.hp <= 0) {
         u.hp = 0;
         const goldLoss = Math.floor(u.gold * 0.12);
@@ -969,8 +1203,7 @@ module.exports = async (req, res) => {
       ));
     }
 
-    // ==================== 기본 ====================
-    return res.json(reply('🏔️ 에테르의 탑', ['시작']));
+    return res.json(reply('🏔️ 에테르의 탑', ['시작', '랭킹']));
     
   } catch (e) {
     console.error(e);

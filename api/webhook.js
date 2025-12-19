@@ -2,12 +2,9 @@ const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getFirestore } = require('firebase-admin/firestore');
 
 if (!getApps().length) {
+  const config = JSON.parse(process.env.FIREBASE_CONFIG);
   initializeApp({
-    credential: cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    }),
+    credential: cert(config),
   });
 }
 const db = getFirestore();

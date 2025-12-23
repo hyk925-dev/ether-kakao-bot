@@ -391,10 +391,22 @@ ${tips.join('\n')}`;
 }
 
 // ============================================
+// HP 바 생성
+// ============================================
+
+function createHPBar(current, max, length = 10) {
+  const percent = Math.max(0, Math.min(1, current / max));
+  const filled = Math.round(percent * length);
+  const empty = length - filled;
+  return '█'.repeat(filled) + '░'.repeat(empty);
+}
+
+// ============================================
 // Export
 // ============================================
 
 module.exports = {
+  createHPBar,
   getTownText,
   getEtherMenu,
   getHelpText,

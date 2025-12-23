@@ -9,6 +9,7 @@ const { getMonsterImage } = require('../../data/images');
 const { generateItem, getItemDisplay } = require('../../systems/items');
 const { reply, replyWithImage } = require('../../utils/response');
 const { calcStats, getReqExp } = require('../../utils/calc');
+const { createHPBar } = require('../../utils/text');
 const {
   spawnMonster,
   checkBossPhase,
@@ -46,23 +47,66 @@ const {
 // ============================================
 
 /**
+ * 몬스터 HP 구간별 반응 텍스트
+ */
+function getMonsterReaction(enemy) {
+  const hpPercent = enemy.hp / enemy.maxHp;
+  if (hpPercent > 0.74) return '';
+  if (hpPercent > 0.49) return `${enemy.name}가 경계한다`;
+  if (hpPercent > 0.24) return `${enemy.name}가 비틀거린다!`;
+  return `${enemy.name}가 몸을 떨고 있다...`;
+}
+
+/**
+ * 패배 메시지 생성
+ */
+function getDefeatMessage(goldLoss = 0) {
+  let text = `━━━━━━━━━━━━━━━━\n`;
+  text += `💀 패배...\n`;
+  text += `━━━━━━━━━━━━━━━━\n\n`;
+  text += `어둠 속으로 의식이 사라진다...\n\n`;
+  if (goldLoss > 0) {
+    text += `💸 -${goldLoss}G (약탈당함)\n`;
+  }
+  text += `📍 마을로 귀환`;
+  return text;
+}
+
+/**
  * 전투 시작 UI 생성 (v4.0 완성판)
  */
-function getBattleStartUI(user, enemy, telegraph, choices) {
+function getBattleStartUI(user, enemy, telegraph, choices, understandingLevel) {
   const c = calcStats(user);
-  
-  let text = `⚔️ ${enemy.name} 출현!\n`;
-  text += `━━━━━━━━━━━━━━━━━━\n`;
-  text += `❤️ HP: ${user.hp}/${c.maxHp}\n`;
-  text += `👹 ${enemy.name} HP: ${enemy.hp}\n`;
-  text += `━━━━━━━━━━━━━━━━━━\n`;
-  text += `📖 전조\n${telegraph}\n`;
-  text += `━━━━━━━━━━━━━━━━━━`;
-  
+
+  // 이해도 퍼센트 계산
+  const understanding = user.battleUnderstanding?.[enemy.id || enemy.name];
+  const understandingExp = understanding?.exp || 0;
+
+  // HP 바 생성
+  const playerHpBar = createHPBar(user.hp, c.maxHp, 10);
+
+  let text = `━━━━━━━━━━━━━━━━\n`;
+  text += `⚔️ 전투 발생!\n`;
+  text += `━━━━━━━━━━━━━━━━\n\n`;
+
+  text += `👾 ${enemy.name} 출현!\n`;
+  text += `💀 HP: ${enemy.hp} | 📖 이해도: ${understandingExp}%\n`;
+
+  // 몬스터 설명 (있으면 표시)
+  if (enemy.desc) {
+    text += `\n"${enemy.desc}"\n`;
+  }
+
+  text += `\n━━━━━━━━━━━━━━━━\n`;
+  text += `👤 나: [${playerHpBar}] ${user.hp}/${c.maxHp}\n`;
+  text += `━━━━━━━━━━━━━━━━\n\n`;
+
+  text += `📖 전조\n"${telegraph}"`;
+
   // ??? 제외하고 버튼 생성
   const validChoices = choices.filter(c => c !== '???');
   const buttons = [...validChoices, '스킬', '물약', '도망'].slice(0, 6);
-  
+
   return { text, buttons };
 }
 
@@ -133,28 +177,30 @@ async function handleVictory(user, enemy, res, combatLog, saveUser, userId) {
   // 이해도 표시
   const monsterId = enemy.id || enemy.name;
   const understanding = user.battleUnderstanding?.[monsterId];
-  let understandingText = '';
-  if (understanding) {
-    const level = understanding.level || 0;
-    const exp = understanding.exp || 0;
-    const levelName = getUnderstandingLevelText(level);
-    understandingText = `\n📖 ${enemy.name} 이해도: Lv.${level} (${exp}/100)\n${levelName}`;
-  }
-  
-  // 결과 텍스트
-  let text = `${combatLog}\n\n🎉 승리!\n`;
-  text += `━━━━━━━━━━━━━━━━━━\n`;
+  const understandingExp = understanding?.exp || 0;
+
+  // 결과 텍스트 (새 형식)
+  let text = `━━━━━━━━━━━━━━━━\n`;
+  text += `🎉 승리!\n`;
+  text += `━━━━━━━━━━━━━━━━\n\n`;
+
+  text += `💀 ${enemy.name} 처치!\n\n`;
+
   text += `💰 ${goldGain}G | 📈 ${expGain} EXP\n`;
   if (totalLevels > 0) {
-    text += `⭐ Lv.${user.lv} (+${totalLevels * 5}점)\n`;
+    text += `⭐ 레벨업! Lv.${user.lv} (+${totalLevels * 5} 스탯포인트)\n`;
   }
+  text += `📖 ${enemy.name} 이해도: ${understandingExp}/100\n\n`;
+
+  // 드랍 아이템
   if (drop) {
-    text += `📦 ${getItemDisplay(drop)}\n`;
+    text += `🎁 드랍: ${getItemDisplay(drop)}\n`;
+    if (guaranteeRare) {
+      text += `⭐ 보스 첫 킬 보상!\n`;
+    }
+  } else {
+    text += `🎁 드랍: 없음\n`;
   }
-  if (guaranteeRare) {
-    text += `⭐ 보스 첫 킬 보상!\n`;
-  }
-  text += understandingText;
   
   // 상태 초기화
   user.phase = 'town';
@@ -176,18 +222,29 @@ async function handleVictory(user, enemy, res, combatLog, saveUser, userId) {
  */
 async function processBattleTurn(user, enemy, interpretResult, context, res, saveUser, userId) {
   const c = calcStats(user);
-  let text = interpretResult.message + "\n\n";
-  
+  const turnNum = user.battleTurn || 1;
+
+  // 턴 데이터 추적
+  let totalDamageDealt = 0;
+  let totalDamageReceived = 0;
+  let effectsText = [];
+
+  // 턴 헤더
+  let text = `━━━ TURN ${turnNum} ━━━\n\n`;
+  text += `🎯 나의 행동: ${context.interpretResult?.choice || '알 수 없음'}\n\n`;
+  text += `${interpretResult.message}\n`;
+
   // 패시브 효과 로그
   const effectsLog = [];
   if (context.forceCrit) effectsLog.push("크리 확정");
   if (context.negateEnemyPriority) effectsLog.push("적 선공 무효");
   if (context.playerPriority) effectsLog.push("선공 확보");
   if (context.selfDamagePercent) effectsLog.push(`자해 ${Math.floor(context.selfDamagePercent * 100)}%`);
-  
+
   if (effectsLog.length > 0) {
-    text += `✨ ${effectsLog.join(", ")}\n\n`;
+    text += `✨ ${effectsLog.join(", ")}\n`;
   }
+  text += '\n';
   
   // 선제권 판정
   const priority = checkPriority(user, enemy, interpretResult, context);
@@ -197,68 +254,77 @@ async function processBattleTurn(user, enemy, interpretResult, context, res, sav
     // 플레이어 먼저
     const playerDamage = calculatePlayerDamage(user, enemy, interpretResult, context);
     enemy.hp -= playerDamage;
+    totalDamageDealt += playerDamage;
     recordDamage(user, playerDamage, 'dealt');
-    text += `⚔️ ${playerDamage} 피해\n`;
-    
+    text += `⚔️ ${playerDamage} → 💀 ${enemy.name}\n`;
+
     // 공격 패시브
     const attackPassives = applyOnAttackPassives(user, enemy, playerDamage);
     if (attackPassives.lifesteal) {
       user.hp = Math.min(c.maxHp, user.hp + Math.floor(attackPassives.lifesteal));
       recordHealing(user, Math.floor(attackPassives.lifesteal));
-      text += `💜 흡혈 +${Math.floor(attackPassives.lifesteal)}\n`;
+      effectsText.push(`💜 흡혈 +${Math.floor(attackPassives.lifesteal)}`);
     }
     if (attackPassives.stackBonus) {
       user.hunterStacks = (user.hunterStacks || 0) + 1;
-      text += `🎯 사냥 ${user.hunterStacks}중첩\n`;
+      effectsText.push(`🎯 사냥 ${user.hunterStacks}중첩`);
     }
-    
+
     // 자해
     if (context.selfDamagePercent) {
       const selfDmg = Math.floor(c.maxHp * context.selfDamagePercent);
       user.hp -= selfDmg;
-      text += `💔 자해 -${selfDmg}\n`;
+      totalDamageReceived += selfDmg;
+      effectsText.push(`💔 자해 -${selfDmg}`);
     }
-    
+
     // 적 처치
     if (enemy.hp <= 0) {
       incrementTurn(user);
       return handleVictory(user, enemy, res, text, saveUser, userId);
     }
-    
+
     // 적 반격
     const enemyDamage = calculateEnemyDamage(enemy, user, user.currentPattern, interpretResult, context);
     user.hp -= enemyDamage;
+    totalDamageReceived += enemyDamage;
     recordDamage(user, enemyDamage, 'taken');
-    text += `👹 -${enemyDamage} HP\n`;
-    
+    text += `💔 -${enemyDamage} HP\n`;
+
     // 피격 패시브
     const damagedPassives = applyOnDamagedPassives(user, enemy, enemyDamage);
     if (damagedPassives.counter) {
       enemy.hp -= damagedPassives.counterDamage;
-      text += `⚔️ 반격! ${damagedPassives.counterDamage}\n`;
+      totalDamageDealt += damagedPassives.counterDamage;
+      effectsText.push(`⚔️ 반격! ${damagedPassives.counterDamage}`);
     }
   } else {
     // 적 먼저
     const enemyDamage = calculateEnemyDamage(enemy, user, user.currentPattern, interpretResult, context);
     user.hp -= enemyDamage;
+    totalDamageReceived += enemyDamage;
     recordDamage(user, enemyDamage, 'taken');
-    text += `👹 -${enemyDamage} HP\n`;
-    
+    text += `💔 -${enemyDamage} HP (선제 피격)\n`;
+
     // 피격 패시브
     const damagedPassives = applyOnDamagedPassives(user, enemy, enemyDamage);
     if (damagedPassives.counter) {
       enemy.hp -= damagedPassives.counterDamage;
-      text += `⚔️ 반격! ${damagedPassives.counterDamage}\n`;
+      totalDamageDealt += damagedPassives.counterDamage;
+      effectsText.push(`⚔️ 반격! ${damagedPassives.counterDamage}`);
     }
-    
+
     // 사망 체크
     if (user.hp <= 0) {
       // 불굴 체크
       if (checkSurvival(user)) {
         user.hp = 1;
-        text += `🛡️ 불굴! HP 1로 생존\n`;
+        effectsText.push(`🛡️ 불굴! HP 1로 생존`);
       } else {
         incrementTurn(user);
+        // 골드 손실 (10% 약탈)
+        const goldLoss = Math.floor(user.gold * 0.1);
+        user.gold -= goldLoss;
         user.phase = 'town';
         user.hp = Math.floor(c.maxHp * 0.3);
         user.monster = null;
@@ -268,36 +334,35 @@ async function processBattleTurn(user, enemy, interpretResult, context, res, sav
         user.potionsUsedInBattle = 0;
         recordBattleDeath(user, enemy);
         await saveUser(userId, user);
-        return res.json(reply(
-          `💀 사망\n${text}\nHP 30% 복구됨`,
-          ['마을']
-        ));
+        return res.json(reply(getDefeatMessage(goldLoss), ['마을']));
       }
     }
-    
+
     // 플레이어 반격
     const playerDamage = calculatePlayerDamage(user, enemy, interpretResult, context);
     enemy.hp -= playerDamage;
+    totalDamageDealt += playerDamage;
     recordDamage(user, playerDamage, 'dealt');
-    text += `⚔️ ${playerDamage} 피해\n`;
-    
+    text += `⚔️ ${playerDamage} → 💀 ${enemy.name}\n`;
+
     // 공격 패시브
     const attackPassives = applyOnAttackPassives(user, enemy, playerDamage);
     if (attackPassives.lifesteal) {
       user.hp = Math.min(c.maxHp, user.hp + Math.floor(attackPassives.lifesteal));
       recordHealing(user, Math.floor(attackPassives.lifesteal));
-      text += `💜 흡혈 +${Math.floor(attackPassives.lifesteal)}\n`;
+      effectsText.push(`💜 흡혈 +${Math.floor(attackPassives.lifesteal)}`);
     }
     if (attackPassives.stackBonus) {
       user.hunterStacks = (user.hunterStacks || 0) + 1;
-      text += `🎯 사냥 ${user.hunterStacks}중첩\n`;
+      effectsText.push(`🎯 사냥 ${user.hunterStacks}중첩`);
     }
-    
+
     // 자해
     if (context.selfDamagePercent) {
       const selfDmg = Math.floor(c.maxHp * context.selfDamagePercent);
       user.hp -= selfDmg;
-      text += `💔 자해 -${selfDmg}\n`;
+      totalDamageReceived += selfDmg;
+      effectsText.push(`💔 자해 -${selfDmg}`);
     }
   }
   
@@ -309,6 +374,9 @@ async function processBattleTurn(user, enemy, interpretResult, context, res, sav
   if (user.hp <= 0) {
     if (!checkSurvival(user)) {
       incrementTurn(user);
+      // 골드 손실 (10% 약탈)
+      const goldLoss = Math.floor(user.gold * 0.1);
+      user.gold -= goldLoss;
       user.phase = 'town';
       user.hp = Math.floor(c.maxHp * 0.3);
       user.monster = null;
@@ -318,13 +386,10 @@ async function processBattleTurn(user, enemy, interpretResult, context, res, sav
       user.potionsUsedInBattle = 0;
       recordBattleDeath(user, enemy);
       await saveUser(userId, user);
-      return res.json(reply(
-        `💀 사망\n${text}\nHP 30% 복구됨`,
-        ['마을']
-      ));
+      return res.json(reply(getDefeatMessage(goldLoss), ['마을']));
     }
   }
-  
+
   // 보스 페이즈 체크
   const phaseChange = checkBossPhase(enemy);
   if (phaseChange) {
@@ -348,17 +413,36 @@ async function processBattleTurn(user, enemy, interpretResult, context, res, sav
     user.understandingLevel = newUnderstandingLevel;
   }
   
+  // 효과 텍스트 출력
+  if (effectsText.length > 0) {
+    text += effectsText.join('\n') + '\n';
+  }
+
+  // HP 상태 표시 (HP 바 포함)
+  const playerHpBar = createHPBar(Math.max(0, user.hp), c.maxHp, 10);
+  const enemyHpBar = createHPBar(Math.max(0, enemy.hp), enemy.maxHp, 10);
+
+  text += `\n👤 나: [${playerHpBar}] ${Math.max(0, user.hp)}/${c.maxHp}\n`;
+  text += `👾 ${enemy.name}: [${enemyHpBar}] ${Math.max(0, enemy.hp)}/${enemy.maxHp}\n`;
+
+  // 몬스터 HP 구간별 반응
+  const monsterReaction = getMonsterReaction(enemy);
+  if (monsterReaction) {
+    text += `\n${monsterReaction}\n`;
+  }
+
+  text += `━━━━━━━━━━━━━━━━━━\n`;
+
   // 다음 패턴 준비
   const nextPattern = selectPattern(enemy);
   const nextTelegraph = getTelegraph(nextPattern, user.understandingLevel);
   const nextChoices = getChoices(nextPattern, user.understandingLevel);
-  
+
   user.currentPattern = nextPattern;
   user.battleTurn = (user.battleTurn || 1) + 1;
-  
-  text += `\n━━━━━━━━━━━━━━━━━━\n`;
+
   text += `📖 다음 전조\n${nextTelegraph}`;
-  
+
   // 연속 성공 표시
   const streak = user.interpretStreak || 0;
   if (streak >= 3) {
@@ -414,9 +498,9 @@ module.exports = async function battleHandler(ctx) {
     u.potionsUsedInBattle = 0;
     
     await saveUser(userId, u);
-    
+
     // 화면 출력
-    const ui = getBattleStartUI(u, monster, telegraph, choices);
+    const ui = getBattleStartUI(u, monster, telegraph, choices, understandingLevel);
     const monsterImg = getMonsterImage(monster.name);
     
     if (monsterImg) {
@@ -521,6 +605,9 @@ module.exports = async function battleHandler(ctx) {
     if (u.hp <= 0) {
       if (!checkSurvival(u)) {
         incrementTurn(u);
+        // 골드 손실 (10% 약탈)
+        const goldLoss = Math.floor(u.gold * 0.1);
+        u.gold -= goldLoss;
         u.phase = 'town';
         u.hp = Math.floor(c.maxHp * 0.3);
         u.monster = null;
@@ -530,16 +617,13 @@ module.exports = async function battleHandler(ctx) {
         u.potionsUsedInBattle = 0;
         recordBattleDeath(u, m);
         await saveUser(userId, u);
-        return res.json(reply(
-          `💀 사망\n${skillText}\nHP 30% 복구됨`,
-          ['마을']
-        ));
+        return res.json(reply(getDefeatMessage(goldLoss), ['마을']));
       } else {
         u.hp = 1;
         skillText += `🛡️ 불굴! HP 1로 생존\n`;
       }
     }
-    
+
     // 다음 패턴
     const nextPattern = selectPattern(m);
     const nextTelegraph = getTelegraph(nextPattern, understandingLevel);
@@ -597,11 +681,11 @@ module.exports = async function battleHandler(ctx) {
   // 패시브 적용
   // ========================================
   const context = {
-    interpretResult,
+    interpretResult: { ...interpretResult, choice: msg },
     streakBonus,
     hunterStacks: u.hunterStacks || 0
   };
-  
+
   applyAllPassives(u, m, interpretResult, context);
   
   // ========================================

@@ -1,0 +1,293 @@
+// ============================================
+// ETHER ONLINE v4.0 Webhook
+// ============================================
+
+/**
+ * v4.0 주요 변경점:
+ * - 전투 시스템을 v4.0 패턴 기반으로 교체
+ * - handlers 폴더로 기능 분리
+ * - 라우팅 순서 최적화
+ */
+
+const express = require('express');
+const app = express();
+app.use(express.json());
+
+// Utils imports
+const { getUser, saveUser, deleteUser, getUserByName, getTopUsers } = require('../utils/db');
+const { calcStats } = require('../utils/calc');
+const { reply } = require('../utils/response');
+const { getEtherMenu } = require('../utils/text');
+
+// Handler imports
+const {
+  authHandler,
+  townHandler,
+  battleHandler,
+  equipmentHandler,
+  shopHandler,
+  exploreHandler,
+  socialHandler,
+  adminHandler,
+  isAdmin
+} = require('./handlers');
+
+// Railway 헬스체크
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    version: 'v4.0.0',
+    timestamp: new Date().toISOString(),
+    combat: 'pattern-based'
+  });
+});
+
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'ETHER ONLINE v4.0.0 API',
+    status: 'running',
+    combat: 'pattern-based',
+    handlers: 8
+  });
+});
+
+// ============================================
+// Main Webhook
+// ============================================
+
+app.post('/api/webhook', async (req, res) => {
+  try {
+    // ========================================
+    // 0. 기본 데이터 추출
+    // ========================================
+    const userId = req.body.userRequest?.user?.id;
+    const msg = req.body.userRequest?.utterance?.trim() || '';
+    
+    if (!userId) {
+      return res.json(reply('오류 발생', ['시작']));
+    }
+    
+    // ========================================
+    // 유저 정보 로드
+    // ========================================
+    let u = await getUser(userId);
+    const c = u ? calcStats(u) : null;
+    
+    // 컨텍스트 생성
+    const ctx = {
+      userId,
+      msg,
+      u,
+      c,
+      res,
+      saveUser,
+      deleteUser,
+      getUserByName,
+      getTopUsers,
+      calcStats,
+      isAdmin: isAdmin(userId)
+    };
+    
+    // ========================================
+    // 1. 공통 명령어 (로그인 불필요)
+    // ========================================
+    
+    // @에테르 - 전체 명령어 안내
+    if (msg === '@에테르' || msg === '에테르') {
+      return res.json(reply(getEtherMenu(), u ? ['마을'] : ['시작']));
+    }
+    
+    // ========================================
+    // 2. 운영자 명령어 (최우선)
+    // ========================================
+    
+    if (msg.startsWith('@')) {
+      // 운영자 전용 명령어 (@베타보상, @레벨설정, @공지 등)
+      const result = await adminHandler(ctx);
+      if (result !== null) return result;
+      
+      // 소셜 명령어 (@결투, @검색, @선물, @자랑)
+      const socialCommands = ['@결투', '@검색', '@선물', '@자랑'];
+      if (socialCommands.some(cmd => msg.startsWith(cmd))) {
+        return await socialHandler(ctx);
+      }
+    }
+    
+    // 랭킹 (로그인 불필요)
+    if (msg === '랭킹' || msg === '전투력랭킹') {
+      return await socialHandler(ctx);
+    }
+    
+    // ========================================
+    // 3. 비로그인 / 캐릭터 생성 단계
+    // ========================================
+    // user가 없거나 생성 단계면 authHandler로
+    
+    if (!u || u.phase === 'naming' || u.phase === 'job') {
+      return await authHandler(ctx);
+    }
+    
+    // ========================================
+    // 4. 전투 중 (phase: battle)
+    // ========================================
+    
+    if (u.phase === 'battle') {
+      return await battleHandler(ctx);
+    }
+    
+    // ========================================
+    // 5. 탐사 이벤트 중 (phase: event_*)
+    // ========================================
+    
+    if (u.phase && u.phase.startsWith('event_')) {
+      return await exploreHandler(ctx);
+    }
+    
+    // ========================================
+    // 6. 마을 (phase: town)
+    // ========================================
+    
+    if (u.phase === 'town') {
+      
+      // ----------------------------------------
+      // 6-1. 마을 명령어 (townHandler)
+      // ----------------------------------------
+      const townCommands = ['마을', '상태', '휴식', '층이동', '정화', '더보기'];
+      const townPatterns = [
+        /^\d+층$/,                              // 15층
+        /^(힘|민첩|지능|의지|체력|운)\+/        // 힘+5, 민첩+전부
+      ];
+      
+      if (townCommands.includes(msg) || townPatterns.some(p => p.test(msg))) {
+        return await townHandler(ctx);
+      }
+      
+      // ----------------------------------------
+      // 6-2. 전투 (battleHandler)
+      // ----------------------------------------
+      if (msg === '전투' || msg === '광기전투') {
+        return await battleHandler(ctx);
+      }
+      
+      // ----------------------------------------
+      // 6-3. 장비 (equipmentHandler)
+      // ----------------------------------------
+      const equipCommands = ['장비', '목록', '강화', '판매', '이전', '다음'];
+      const equipPatterns = [
+        /^\d+번$/,                    // 1번, 2번
+        /^장착/,                      // 장착
+        /^판매\d+$/,                  // 판매1
+        /^인벤\d+$/,                  // 인벤1
+        /^상세/,                      // 상세
+        /^강화weapon$/,               // 강화weapon
+        /^강화armor$/,                // 강화armor
+        /^강화accessory$/,            // 강화accessory
+        /^강화relic$/                 // 강화relic
+      ];
+      
+      if (equipCommands.includes(msg) || equipPatterns.some(p => p.test(msg))) {
+        return await equipmentHandler(ctx);
+      }
+      
+      // ----------------------------------------
+      // 6-4. 상점 (shopHandler)
+      // ----------------------------------------
+      const shopCommands = ['상점', '물약구매'];
+      const shopPatterns = [
+        /^(하급|중급|고급|진정제)/,
+        /^물약\+\d+$/,
+        /^중급물약\+\d+$/,
+        /^고급물약\+\d+$/
+      ];
+      
+      if (shopCommands.includes(msg) || shopPatterns.some(p => p.test(msg))) {
+        return await shopHandler(ctx);
+      }
+      
+      // ----------------------------------------
+      // 6-5. 탐사 (exploreHandler)
+      // ----------------------------------------
+      const exploreCommands = ['탐사', '안전탐사', '위험탐사', '금기탐사', '모닥불'];
+      if (exploreCommands.includes(msg)) {
+        return await exploreHandler(ctx);
+      }
+      
+      // ----------------------------------------
+      // 6-6. 통계
+      // ----------------------------------------
+      if (msg === '통계' || msg === '@통계') {
+        const { getStatsText } = require('../utils/stats');
+        const statsText = getStatsText(u);
+        return res.json(reply(statsText, ['마을']));
+      }
+      
+      // ----------------------------------------
+      // 6-7. 초기화
+      // ----------------------------------------
+      if (msg === '초기화' || msg === '초기화확인') {
+        return await authHandler(ctx);
+      }
+    }
+    
+    // ========================================
+    // 7. 매칭 안 됨 - Fallback 응답
+    // ========================================
+    
+    return res.json(reply(
+      '명령어를 확인해주세요.\n\n💡 v4.0 전투 시스템:\n전투 중 "회피", "방어", "역습" 선택\n\n@에테르 입력시 전체 명령어 안내',
+      u ? ['마을', '@에테르'] : ['시작', '@에테르']
+    ));
+    
+  } catch (err) {
+    console.error('━━━━━━━━━━━━━━━━━━');
+    console.error('Webhook Error:', err);
+    console.error('Message:', err.message);
+    console.error('Stack:', err.stack);
+    console.error('━━━━━━━━━━━━━━━━━━');
+    
+    return res.json(reply(
+      '오류가 발생했습니다.\n잠시 후 다시 시도해주세요.',
+      ['마을', '시작']
+    ));
+  }
+});
+
+// ============================================
+// Railway 배포를 위한 포트 바인딩
+// ============================================
+
+const PORT = process.env.PORT || 8080;
+const HOST = '0.0.0.0'; // Railway는 0.0.0.0 바인딩 필수
+
+const server = app.listen(PORT, HOST, () => {
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log(`ETHER ONLINE v4.0.0`);
+  console.log(`Running on ${HOST}:${PORT}`);
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Health: http://${HOST}:${PORT}/health`);
+  console.log(`Combat: Pattern-based v4.0`);
+  console.log(`Handlers: 8 modules`);
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+});
+
+// ============================================
+// Graceful Shutdown
+// ============================================
+
+process.on('SIGTERM', () => {
+  console.log('SIGTERM signal received: closing HTTP server');
+  server.close(() => {
+    console.log('HTTP server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT signal received: closing HTTP server');
+  server.close(() => {
+    console.log('HTTP server closed');
+    process.exit(0);
+  });
+});
+
+module.exports = app;

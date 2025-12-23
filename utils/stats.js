@@ -16,44 +16,85 @@
 
 /**
  * 플레이어 통계 구조 초기화
+ * v4.0 수정: 각 하위 필드 개별 체크 (기존 유저 호환)
  * @param {Object} player - 플레이어
  */
 function initPlayerStats(player) {
+  // 1. stats 객체 자체가 없으면 생성
   if (!player.stats) {
-    player.stats = {
-      totalBattles: 0,
-      totalWins: 0,
-      totalDeaths: 0,
-      totalDamageDealt: 0,
-      totalDamageTaken: 0,
-      totalHealing: 0,
-      
-      // 해석 통계
-      interpretStats: {
-        perfect: 0,
-        partial: 0,
-        fail: 0,
-        total: 0,
-        currentStreak: 0,
-        bestStreak: 0
-      },
-      
-      // 패턴별 통계
-      patternStats: {},
-      
-      // 몬스터별 통계
-      monsterStats: {},
-      
-      // 보스 통계
-      bossStats: {
-        kills: 0,
-        deaths: 0,
-        bestTime: null
-      },
-      
-      // 직업 통계
-      jobStats: {}
-    };
+    player.stats = {};
+  }
+
+  // 2. 기본 숫자 필드 개별 체크
+  if (typeof player.stats.totalBattles !== 'number') {
+    player.stats.totalBattles = 0;
+  }
+  if (typeof player.stats.totalWins !== 'number') {
+    player.stats.totalWins = 0;
+  }
+  if (typeof player.stats.totalDeaths !== 'number') {
+    player.stats.totalDeaths = 0;
+  }
+  if (typeof player.stats.totalDamageDealt !== 'number') {
+    player.stats.totalDamageDealt = 0;
+  }
+  if (typeof player.stats.totalDamageTaken !== 'number') {
+    player.stats.totalDamageTaken = 0;
+  }
+  if (typeof player.stats.totalHealing !== 'number') {
+    player.stats.totalHealing = 0;
+  }
+
+  // 3. 해석 통계 객체 체크
+  if (!player.stats.interpretStats) {
+    player.stats.interpretStats = {};
+  }
+  if (typeof player.stats.interpretStats.perfect !== 'number') {
+    player.stats.interpretStats.perfect = 0;
+  }
+  if (typeof player.stats.interpretStats.partial !== 'number') {
+    player.stats.interpretStats.partial = 0;
+  }
+  if (typeof player.stats.interpretStats.fail !== 'number') {
+    player.stats.interpretStats.fail = 0;
+  }
+  if (typeof player.stats.interpretStats.total !== 'number') {
+    player.stats.interpretStats.total = 0;
+  }
+  if (typeof player.stats.interpretStats.currentStreak !== 'number') {
+    player.stats.interpretStats.currentStreak = 0;
+  }
+  if (typeof player.stats.interpretStats.bestStreak !== 'number') {
+    player.stats.interpretStats.bestStreak = 0;
+  }
+
+  // 4. 패턴별 통계 객체 체크
+  if (!player.stats.patternStats) {
+    player.stats.patternStats = {};
+  }
+
+  // 5. 몬스터별 통계 객체 체크
+  if (!player.stats.monsterStats) {
+    player.stats.monsterStats = {};
+  }
+
+  // 6. 보스 통계 객체 체크
+  if (!player.stats.bossStats) {
+    player.stats.bossStats = {};
+  }
+  if (typeof player.stats.bossStats.kills !== 'number') {
+    player.stats.bossStats.kills = 0;
+  }
+  if (typeof player.stats.bossStats.deaths !== 'number') {
+    player.stats.bossStats.deaths = 0;
+  }
+  if (player.stats.bossStats.bestTime === undefined) {
+    player.stats.bossStats.bestTime = null;
+  }
+
+  // 7. 직업 통계 객체 체크
+  if (!player.stats.jobStats) {
+    player.stats.jobStats = {};
   }
 }
 

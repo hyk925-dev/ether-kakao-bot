@@ -494,7 +494,7 @@ module.exports = async function battleHandler(ctx) {
     }
     
     // 스킬 사용
-    let skillText = `⚡ ${job.skill.name}!\n${job.skill.effect}\n\n`;
+    let skillText = `⚡ ${job.skill.name}!\n${job.skill.desc}\n\n`;
     
     // 스킬 효과 적용 (간단 버전)
     const skillDamage = Math.floor(c.atk * 2);

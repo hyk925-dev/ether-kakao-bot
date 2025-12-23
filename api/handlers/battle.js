@@ -83,7 +83,7 @@ function getBattleStartUI(user, enemy, telegraph, choices, understandingLevel) {
   const understandingExp = understanding?.exp || 0;
 
   // HP 바 생성
-  const playerHpBar = createHPBar(user.hp, c.maxHp, 10);
+  const playerHpBar = createHPBar(user.hp, c.maxHp, 5);
 
   let text = `━━━━━━━━━━━━━━━━\n`;
   text += `⚔️ 전투 발생!\n`;
@@ -419,8 +419,8 @@ async function processBattleTurn(user, enemy, interpretResult, context, res, sav
   }
 
   // HP 상태 표시 (HP 바 포함)
-  const playerHpBar = createHPBar(Math.max(0, user.hp), c.maxHp, 10);
-  const enemyHpBar = createHPBar(Math.max(0, enemy.hp), enemy.maxHp, 10);
+  const playerHpBar = createHPBar(Math.max(0, user.hp), c.maxHp, 5);
+  const enemyHpBar = createHPBar(Math.max(0, enemy.hp), enemy.maxHp, 5);
 
   text += `\n👤 나: [${playerHpBar}] ${Math.max(0, user.hp)}/${c.maxHp}\n`;
   text += `👾 ${enemy.name}: [${enemyHpBar}] ${Math.max(0, enemy.hp)}/${enemy.maxHp}\n`;

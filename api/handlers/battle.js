@@ -8,7 +8,7 @@ const { BOSSES: REGION_BOSSES } = require('../../data/bosses');
 const { getBoss, getBossPattern, isRegionBossFloor } = require('../../bosses');
 const { getMonsterImage } = require('../../data/images');
 const { generateItem, getItemDisplay } = require('../../systems/items');
-const { reply, replyWithImage } = require('../../utils/response');
+const { reply, replyWithImage, replyCard } = require('../../utils/response');
 const { calcStats, getReqExp } = require('../../utils/calc');
 const { createHPBar, getPatternIcon } = require('../../utils/text');
 const {
@@ -350,6 +350,22 @@ async function handleVictory(user, enemy, res, combatLog, saveUser, userId) {
   user.potionsUsedInBattle = 0;
 
   await saveUser(userId, user);
+
+  // 드랍 아이템이 있고 이미지가 있으면 basicCard 사용
+  if (drop && drop.image) {
+    const cardDesc = `${enemy.icon || '👹'} ${enemy.name} 처치!\n\n` +
+      `💰 +${goldGain}G | ✨ +${expGain} EXP\n` +
+      `📖 이해도 ${understandingExp}/100\n\n` +
+      `💎 ${drop.gradeColor || '⚪'} ${drop.name} 획득!` +
+      (totalLevels > 0 ? `\n\n🌟 LEVEL UP! Lv.${user.lv}` : '');
+
+    return res.json(replyCard({
+      title: '🎉 승리!',
+      description: cardDesc,
+      imageUrl: drop.image,
+      buttons: buttons
+    }));
+  }
 
   return res.json(reply(text, buttons));
 }

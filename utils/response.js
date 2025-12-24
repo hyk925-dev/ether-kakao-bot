@@ -52,36 +52,64 @@ function replyWithImage(imageUrl, text, buttons = []) {
 
 /**
  * 베이직 카드 응답
+ * @param {object|string} options - { title, description, imageUrl, buttons } 또는 title 문자열
+ * @param {string} desc - description (options가 문자열일 때)
+ * @param {array} cardButtons - 버튼 배열 (options가 문자열일 때)
+ * @param {array} quickReplies - 퀵리플라이 배열
  */
-function replyCard(title, desc, cardButtons = [], quickReplies = []) {
-  const card = {
-    title,
-    description: desc
-  };
-  
-  if (cardButtons.length > 0) {
-    card.buttons = cardButtons.map(b => ({
-      label: b.label,
-      action: 'message',
-      messageText: b.text || b.label
-    }));
+function replyCard(options, desc, cardButtons = [], quickReplies = []) {
+  let title, description, imageUrl, buttons;
+
+  // 객체 형태로 받은 경우
+  if (typeof options === 'object' && options !== null && !Array.isArray(options)) {
+    title = options.title;
+    description = options.description;
+    imageUrl = options.imageUrl;
+    buttons = options.buttons || [];
+  } else {
+    // 기존 방식 호환
+    title = options;
+    description = desc;
+    buttons = cardButtons;
   }
-  
+
+  const card = {
+    title: title || '',
+    description: description || ''
+  };
+
+  // 이미지 (있으면)
+  if (imageUrl) {
+    card.thumbnail = { imageUrl };
+  }
+
+  // 버튼
+  if (buttons.length > 0) {
+    card.buttons = buttons.slice(0, 3).map(b => {
+      // 문자열이면 label과 messageText 동일
+      if (typeof b === 'string') {
+        return { label: b, action: 'message', messageText: b };
+      }
+      // 객체면 그대로 사용
+      return { label: b.label, action: 'message', messageText: b.text || b.label };
+    });
+  }
+
   const response = {
     version: '2.0',
     template: {
       outputs: [{ basicCard: card }]
     }
   };
-  
-  if (quickReplies.length > 0) {
+
+  if (quickReplies && quickReplies.length > 0) {
     response.template.quickReplies = quickReplies.map(b => ({
       label: b,
       action: 'message',
       messageText: b
     }));
   }
-  
+
   return response;
 }
 

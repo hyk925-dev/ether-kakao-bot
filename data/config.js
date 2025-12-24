@@ -138,6 +138,14 @@ const NOTICE = {
   channelNotice: '📋 자세한 내용은 채널 공지 확인!'
 };
 
+// 스탯 캡
+const STAT_CAPS = {
+  evasion: 75,       // 기존 60 → 75
+  interpret: 90,     // 기존 95 → 90
+  critRate: 80,      // 유지
+  defReduction: 50   // 방어력으로 최대 50%까지만 피해 감소
+};
+
 module.exports = {
   DUEL_CONFIG,
   EXPLORE_CONFIG,
@@ -152,5 +160,6 @@ module.exports = {
   ADMIN_CONFIG,
   GIFT_CONFIG,
   BETA_REWARD,
-  NOTICE
+  NOTICE,
+  STAT_CAPS
 };

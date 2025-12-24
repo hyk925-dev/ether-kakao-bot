@@ -3,11 +3,11 @@
 // 장비 관리 (목록, 강화, 판매)
 // ============================================
 
-const { reply, replyItemCard } = require('../../utils/response');
+const { reply } = require('../../utils/response');
 const { getItemDisplay, getItemStatText } = require('../../systems/items');
 const { getEnhanceRate, getEnhanceCost, executeEnhance } = require('../../systems/enhance');
 
-const { getSlotIcon } = require('../../utils/text');
+const { getSlotIcon, createRateBar } = require('../../utils/text');
 // ============================================
 // 헬퍼 함수
 // ============================================
@@ -120,61 +120,78 @@ module.exports = async function equipmentHandler(ctx) {
   // ========================================
   if (msg === '강화') {
     const equipped = u.equipment || {};
-    let text = '🔨 강화할 장비 선택\n━━━━━━━━━━━━━━━━━━\n';
-    
+    let text = '🔨 강화\n━━━━━━━━━━━━━━━━━━\n';
+    text += `💰 보유: ${(u.gold || 0).toLocaleString()}G\n\n`;
+
     const enhanceable = [];
     const slots = ['weapon', 'armor', 'accessory', 'relic'];
-    
+
     slots.forEach(slot => {
       const item = equipped[slot];
       if (item && (item.enhance || 0) < 10) {
-        const rate = getEnhanceRate(item.enhance || 0);
-        const cost = getEnhanceCost(item.enhance || 0);
-        const displayName = item.nickname || item.name;
         const current = item.enhance || 0;
         const next = current + 1;
-        
-        enhanceable.push({
-          slot: slot,
-          text: `${getSlotIcon(slot)} ${displayName} +${current} → +${next}`,
-          rate: rate,
-          cost: cost
-        });
+        const rate = getEnhanceRate(current);
+        const cost = getEnhanceCost(current);
+        const displayName = item.nickname || item.name;
+
+        // 성공률 바
+        const rateBar = createRateBar(rate, 10);
+
+        text += `${getSlotIcon(slot)} ${displayName} +${current} → +${next}\n`;
+        text += `   [${rateBar}] ${rate}%\n`;
+        text += `   비용: ${cost}G`;
+
+        // 파괴 위험 표시 (+7부터)
+        if (current >= 6) {
+          text += ' ⚠️ 파괴 위험';
+        }
+        text += '\n\n';
+
+        enhanceable.push(slot);
       }
     });
-    
+
     if (enhanceable.length === 0) {
-      return res.json(reply("강화 가능한 장비가 없습니다.\n(최대 +10까지 강화 가능)", ['목록', '마을']));
+      return res.json(reply("강화 가능한 장비가 없습니다.\n(장착 중인 장비만 강화 가능, 최대 +10)", ['목록', '마을']));
     }
-    
-    enhanceable.forEach(e => {
-      text += `${e.text}\n성공률 ${e.rate}% | ${e.cost}G\n\n`;
+
+    text += '⚠️ +7부터 실패 시 파괴 위험!';
+
+    // 버튼 생성
+    const buttons = enhanceable.map(slot => {
+      const slotName = { weapon: '무기', armor: '방어구', accessory: '악세', relic: '유물' }[slot];
+      return `${slotName}강화`;
     });
-    
-    const buttons = enhanceable.map(e => `강화${e.slot}`);
     buttons.push('목록', '마을');
-    
+
     return res.json(reply(text, buttons.slice(0, 6)));
   }
+
   
   // ========================================
   // 슬롯별 강화 실행
   // ========================================
-  const enhanceSlots = ['weapon', 'armor', 'accessory', 'relic'];
-  for (const slot of enhanceSlots) {
-    if (msg === `강화${slot}`) {
+  const slotMap = { '무기': 'weapon', '방어구': 'armor', '악세': 'accessory', '유물': 'relic' };
+  const enhanceMatch = msg.match(/^(.+)강화$/);
+  if (enhanceMatch) {
+    const slotName = enhanceMatch[1];
+    const slot = slotMap[slotName];
+
+    if (slot) {
       const item = u.equipment?.[slot];
       if (!item) {
-        return res.json(reply(`${getSlotName(slot)} 슬롯에 장비가 없습니다.`, ['강화', '마을']));
+        return res.json(reply(`${slotName} 슬롯에 장비가 없습니다.`, ['강화', '마을']));
       }
       if ((item.enhance || 0) >= 10) {
         return res.json(reply(`이미 최대 강화 단계입니다. (+10)`, ['강화', '마을']));
       }
-      
+
       // executeEnhance 함수 호출
       return executeEnhance(res, u, userId, slot, saveUser);
     }
   }
+
   
   // ========================================
   // 2단계-C: 판매
@@ -265,39 +282,25 @@ module.exports = async function equipmentHandler(ctx) {
   if (msg.match(/^\d+번$/)) {
     const idx = parseInt(msg.replace('번', '')) - 1;
     const item = inventory[idx];
-
+    
     if (!item) {
       return res.json(reply("해당 아이템이 없습니다.", ['목록', '마을']));
     }
-
+    
     const displayName = item.nickname || item.name;
     const enhance = item.enhance > 0 ? ` +${item.enhance}` : '';
     const price = Math.floor((item.value || 50) * 0.5);
-
-    // 스탯 배열 생성
-    const stats = [];
-    if (item.atk) stats.push({ label: '⚔️ 공격력', value: `+${item.atk}` });
-    if (item.def) stats.push({ label: '🛡️ 방어력', value: `+${item.def}` });
-    if (item.hp) stats.push({ label: '❤️ HP', value: `+${item.hp}` });
-    if (item.critRate) stats.push({ label: '💥 치명타', value: `+${item.critRate}%` });
-    if (item.evasion) stats.push({ label: '💨 회피', value: `+${item.evasion}%` });
-    stats.push({ label: '💰 판매가', value: `${price}G` });
-
-    // 등급 텍스트
-    const gradeText = `${item.gradeColor || '⚪'} ${item.gradeName || '일반'}`;
-
-    // 아이템 이미지 (있으면)
-    const itemImage = item.image || null;
-
-    return res.json(replyItemCard(
-      `${item.gradeColor || '⚪'} ${displayName}${enhance}`,
-      gradeText,
-      itemImage,
-      stats,
-      [`장착${idx + 1}`, `판매${idx + 1}`, '목록']
-    ));
+    
+    let text = `${item.gradeColor || '⚪'} ${displayName}${enhance}\n`;
+    text += `━━━━━━━━━━━━━━━━━━\n`;
+    text += `등급: ${item.gradeName || '일반'}\n`;
+    text += `${getItemStatText(item)}\n`;
+    text += `━━━━━━━━━━━━━━━━━━\n`;
+    text += `판매가: ${price}G`;
+    
+    return res.json(reply(text, [`인벤${idx + 1}`, `판매${idx + 1}`, '목록']));
   }
-
+  
   // ========================================
   // 기본 응답
   // ========================================

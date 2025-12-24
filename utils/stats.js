@@ -96,6 +96,14 @@ function initPlayerStats(player) {
   if (!player.stats.jobStats) {
     player.stats.jobStats = {};
   }
+
+  // 8. 층 진행 필드 체크 (v4.0.2 추가)
+  if (typeof player.floorKills !== 'number') {
+    player.floorKills = 0;
+  }
+  if (typeof player.bossAvailable !== 'boolean') {
+    player.bossAvailable = false;
+  }
 }
 
 // ============================================

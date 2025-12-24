@@ -1,5 +1,5 @@
 // ============================================
-// Shop Handler v4.0
+// Shop Handler v4.1
 // 상점 (물약 구매)
 // ============================================
 
@@ -18,35 +18,35 @@ module.exports = async function shopHandler(ctx) {
   // 상점 메뉴
   // ========================================
   if (msg === '상점') {
-    let shopText = `━━━━━━━━━━━━━━━━\n`;
-    shopText += `🏪 상점\n`;
-    shopText += `━━━━━━━━━━━━━━━━\n`;
-    shopText += `💰 소지금: ${(u.gold || 0).toLocaleString()}G\n\n`;
-    shopText += `【 물약 】\n`;
-    shopText += `🧪 하급물약 (HP 30%) — ${basicPrice}G\n`;
+    let text = '🛒 상점\n━━━━━━━━━━━━━━━━━━\n';
+    text += `💰 보유: ${(u.gold || 0).toLocaleString()}G\n\n`;
 
-    const buttons = ['하급물약'];
+    // 물약 섹션
+    text += '━━━ 🧪 물약 ━━━\n';
+    text += `하급 ${basicPrice}G  (보유: ${u.potions || 0})\n`;
 
     if (floor >= 11) {
-      shopText += `🧪 중급물약 (HP 50%) — ${mediumPrice}G\n`;
-      buttons.push('중급물약');
+      text += `중급 ${mediumPrice}G  (보유: ${u.mediumPotions || 0})\n`;
     }
-
     if (floor >= 31) {
-      shopText += `🧪 고급물약 (HP 100%) — ${highPrice}G\n`;
-      buttons.push('고급물약');
+      text += `고급 ${highPrice}G  (보유: ${u.hiPotions || 0})\n`;
     }
 
+    // 진정제 섹션 (6층+)
     if (floor >= 6) {
-      shopText += `💊 진정제 (광기 -30) — ${SEDATIVE.price}G\n`;
-      buttons.push('진정제');
+      text += '\n━━━ 💊 진정제 ━━━\n';
+      text += `진정제 ${SEDATIVE.price}G (광기 -30)  (보유: ${u.sedatives || 0})\n`;
     }
 
-    shopText += `\n💡 버튼 또는 "물약+5" 입력`;
+    text += '\n💡 "물약+1", "물약+5", "진정제"';
 
+    // 버튼
+    const buttons = ['물약+1', '물약+5'];
+    if (floor >= 11) buttons.push('중급물약+1');
+    if (floor >= 6) buttons.push('진정제');
     buttons.push('마을');
 
-    return res.json(reply(shopText, buttons));
+    return res.json(reply(text, buttons.slice(0, 6)));
   }
   
   // ========================================

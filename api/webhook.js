@@ -278,16 +278,35 @@ app.post('/api/webhook', async (req, res) => {
     ));
     
   } catch (err) {
-    console.error('━━━━━━━━━━━━━━━━━━');
-    console.error('Webhook Error:', err);
-    console.error('Message:', err.message);
-    console.error('Stack:', err.stack);
-    console.error('━━━━━━━━━━━━━━━━━━');
-    
-    return res.json(reply(
-      '오류가 발생했습니다.\n잠시 후 다시 시도해주세요.',
-      ['마을', '시작']
-    ));
+    // 상세 에러 로깅
+    const errorTime = new Date().toISOString();
+    const userInput = req.body.userRequest?.utterance || 'unknown';
+    const userId = req.body.userRequest?.user?.id || 'unknown';
+
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.error(`[${errorTime}] Webhook Error`);
+    console.error(`User: ${userId.substring(0, 8)}...`);
+    console.error(`Input: "${userInput}"`);
+    console.error(`Error: ${err.message}`);
+    console.error(`Stack: ${err.stack}`);
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    // 에러 시 saveUser 안 함 → 유저 상태 유지 → 재시도 가능
+    // 카카오 응답 직접 반환 (reply 함수 의존 제거)
+    return res.json({
+      version: '2.0',
+      template: {
+        outputs: [{
+          simpleText: {
+            text: '⚠️ 오류가 발생했습니다.\n다시 시도해주세요.\n\n문제가 계속되면 "마을" 입력'
+          }
+        }],
+        quickReplies: [
+          { label: '마을', action: 'message', messageText: '마을' },
+          { label: '다시시도', action: 'message', messageText: userInput }
+        ]
+      }
+    });
   }
 });
 

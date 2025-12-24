@@ -43,7 +43,10 @@ module.exports = async function authHandler(ctx) {
     // 직업 선택 캐러셀
     const jobCards = Object.entries(JOBS).map(([key, job]) => ({
       title: `${job.icon} ${job.name}`,
-      desc: `[${job.role}]\n${job.desc}`,
+      desc: `[${job.role}] ${job.desc}\n\n` +
+            `📊 핵심 스탯: ${job.playstyle.coreStats.join(', ')}\n` +
+            `✅ 유리: ${job.playstyle.bestChoice} 선택\n` +
+            `💡 ${job.playstyle.tip}`,
       image: JOB_IMAGES[key] || null,
       buttons: [{ label: job.name, action: job.name }]
     }));
@@ -61,11 +64,14 @@ module.exports = async function authHandler(ctx) {
       // 다시 캐러셀 표시
       const jobCards = Object.entries(JOBS).map(([key, job]) => ({
         title: `${job.icon} ${job.name}`,
-        desc: `[${job.role}]\n${job.desc}`,
+        desc: `[${job.role}] ${job.desc}\n\n` +
+              `📊 핵심 스탯: ${job.playstyle.coreStats.join(', ')}\n` +
+              `✅ 유리: ${job.playstyle.bestChoice} 선택\n` +
+              `💡 ${job.playstyle.tip}`,
         image: JOB_IMAGES[key] || null,
         buttons: [{ label: job.name, action: job.name }]
       }));
-      
+
       return res.json(replyCarousel(jobCards));
     }
     

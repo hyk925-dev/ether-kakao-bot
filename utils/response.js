@@ -150,25 +150,42 @@ function replyShareCard(imageUrl, title, description, shareText, buttons = []) {
 
 /**
  * 리스트 카드 응답 (인벤토리, 상점용)
+ * @param {string|object} header - 헤더 문자열 또는 { title, imageUrl }
+ * @param {array} items - [{ title, desc/description, image, action, messageText }]
+ * @param {array} buttons - 버튼 문자열 배열 (최대 2개)
  */
 function replyListCard(header, items, buttons = []) {
+  // header가 문자열이면 객체로 변환
+  const headerObj = typeof header === 'string' ? { title: header } : header;
+
   const response = {
     version: "2.0",
     template: {
       outputs: [{
         listCard: {
-          header: { title: header },
+          header: {
+            title: headerObj.title || '',
+            imageUrl: headerObj.imageUrl || undefined
+          },
           items: items.slice(0, 5).map((item) => {
             const listItem = {
               title: item.title || '',
-              description: item.desc || ''
+              description: item.desc || item.description || ''
             };
-            
+
             // imageUrl이 있을 때만 추가
             if (item.image) {
               listItem.imageUrl = item.image;
             }
-            
+
+            // action이 있을 때만 추가
+            if (item.action && item.messageText) {
+              listItem.action = {
+                type: "message",
+                messageText: item.messageText
+              };
+            }
+
             return listItem;
           }),
           buttons: buttons.slice(0, 2).map(b => ({
@@ -180,7 +197,12 @@ function replyListCard(header, items, buttons = []) {
       }]
     }
   };
-  
+
+  // header imageUrl 없으면 제거
+  if (!headerObj.imageUrl) {
+    delete response.template.outputs[0].listCard.header.imageUrl;
+  }
+
   return response;
 }
 

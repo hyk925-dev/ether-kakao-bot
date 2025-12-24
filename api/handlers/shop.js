@@ -4,7 +4,7 @@
 // ============================================
 
 const { SEDATIVE } = require('../../data/items');
-const { reply } = require('../../utils/response');
+const { reply, replyListCard } = require('../../utils/response');
 
 module.exports = async function shopHandler(ctx) {
   const { userId, msg, u, c, res, saveUser } = ctx;
@@ -15,38 +15,56 @@ module.exports = async function shopHandler(ctx) {
   const highPrice = 300 + floor * 6;
   
   // ========================================
-  // 상점 메뉴
+  // 상점 메뉴 — listCard 적용
   // ========================================
   if (msg === '상점') {
-    let text = '🛒 상점\n━━━━━━━━━━━━━━━━━━\n';
-    text += `💰 보유: ${(u.gold || 0).toLocaleString()}G\n\n`;
+    // 헤더
+    const header = `🛒 상점 (💰 ${(u.gold || 0).toLocaleString()}G)`;
 
-    // 물약 섹션
-    text += '━━━ 🧪 물약 ━━━\n';
-    text += `하급 ${basicPrice}G  (보유: ${u.potions || 0})\n`;
+    // 아이템 목록
+    const items = [
+      {
+        title: '🧪 하급 물약',
+        description: `${basicPrice}G (보유: ${u.potions || 0})`,
+        action: 'message',
+        messageText: '물약+1'
+      }
+    ];
 
+    // 11층+ 중급 물약
     if (floor >= 11) {
-      text += `중급 ${mediumPrice}G  (보유: ${u.mediumPotions || 0})\n`;
+      items.push({
+        title: '🧪 중급 물약',
+        description: `${mediumPrice}G (보유: ${u.mediumPotions || 0})`,
+        action: 'message',
+        messageText: '중급물약+1'
+      });
     }
+
+    // 31층+ 고급 물약
     if (floor >= 31) {
-      text += `고급 ${highPrice}G  (보유: ${u.hiPotions || 0})\n`;
+      items.push({
+        title: '🧪 고급 물약',
+        description: `${highPrice}G (보유: ${u.hiPotions || 0})`,
+        action: 'message',
+        messageText: '고급물약+1'
+      });
     }
 
-    // 진정제 섹션 (6층+)
+    // 6층+ 진정제
     if (floor >= 6) {
-      text += '\n━━━ 💊 진정제 ━━━\n';
-      text += `진정제 ${SEDATIVE.price}G (광기 -30)  (보유: ${u.sedatives || 0})\n`;
+      items.push({
+        title: '💊 진정제',
+        description: `${SEDATIVE.price}G (광기 -30, 보유: ${u.sedatives || 0})`,
+        action: 'message',
+        messageText: '진정제'
+      });
     }
 
-    text += '\n💡 "물약+1", "물약+5", "진정제"';
+    // 버튼 (최대 2개)
+    const buttons = ['물약+5', '마을'];
 
-    // 버튼
-    const buttons = ['물약+1', '물약+5'];
-    if (floor >= 11) buttons.push('중급물약+1');
-    if (floor >= 6) buttons.push('진정제');
-    buttons.push('마을');
-
-    return res.json(reply(text, buttons.slice(0, 6)));
+    return res.json(replyListCard(header, items, buttons));
   }
   
   // ========================================

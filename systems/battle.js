@@ -546,9 +546,9 @@ function calculateEnemyDamage(monster, player, pattern, interpretResult, context
     baseDamage *= interpretResult.damageTakenMultiplier;
   }
 
-  // 패턴별 오답 페널티
+  // 패턴별 오답 페널티 (기본 1.5)
   if (interpretResult.result === 'fail') {
-    const wrongPenalty = pattern.wrongPenalty || 1.0;
+    const wrongPenalty = pattern.wrongPenalty || 1.5;
     baseDamage *= wrongPenalty;
   }
 

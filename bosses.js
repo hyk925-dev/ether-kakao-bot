@@ -115,24 +115,8 @@ const bosses = {
     gold: 300,
     patterns: ['기본공격', '발굴르기', '돌진준비', '돌진'],
     description: '미궁의 수호자.'
-  },
-  10: {
-    id: 'boss_10',
-    name: '타락한 기사단장',
-    emoji: '👑⚔️',
-    hp: 400,
-    atk: 35,
-    def: 15,
-    exp: 600,
-    gold: 500,
-    patterns: ['기본공격', '검술연무', '방어자세', '처형선고', '전력질주'],
-    description: '왕국을 배신한 최강의 기사.',
-    isRegionBoss: true,
-    drops: [
-      { item: '기사단장의 망토', chance: 50, stats: { atk: 2, def: 2, hp: 20 } },
-      { item: '타락한 검', chance: 20, stats: { atk: 10 } }
-    ]
   }
+  // 10층 단위 보스는 data/bosses.js에서 관리
 };
 
 const bossPatterns = {
@@ -280,7 +264,17 @@ const bossPatterns = {
   }
 };
 
+// 10층 단위 보스층 여부 확인
+function isRegionBossFloor(floor) {
+  return floor % 10 === 0 && floor > 0;
+}
+
+// 1~9층 보스 반환 (10층 단위는 data/bosses.js에서 처리)
 function getBoss(floor) {
+  // 10층 단위는 별도 처리 필요
+  if (isRegionBossFloor(floor)) {
+    return null;
+  }
   return bosses[floor] || null;
 }
 
@@ -299,6 +293,7 @@ function getNextBossPattern(boss, currentPatternIndex) {
 module.exports = {
   bosses,
   bossPatterns,
+  isRegionBossFloor,
   getBoss,
   getBossPattern,
   getNextBossPattern

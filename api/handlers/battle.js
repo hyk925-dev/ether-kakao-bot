@@ -265,27 +265,40 @@ async function handleVictory(user, enemy, res, combatLog, saveUser, userId) {
   const understanding = user.battleUnderstanding?.[monsterId];
   const understandingExp = understanding?.exp || 0;
 
-  // 결과 텍스트 (새 형식)
-  let text = `━━━━━━━━━━━━━━━━\n`;
-  text += `🎉 승리!\n`;
-  text += `━━━━━━━━━━━━━━━━\n\n`;
+  // 결과 텍스트 (v4.1 새 형식)
+  let text = '━━━━━━━━━━━━━━━━━━\n';
+  text += '       🎉 승리!\n';
+  text += '━━━━━━━━━━━━━━━━━━\n\n';
 
-  text += `💀 ${enemy.name} 처치!\n\n`;
+  text += `${enemy.icon || '👹'} ${enemy.name} 처치!\n\n`;
 
-  text += `💰 ${goldGain}G | 📈 ${expGain} EXP\n`;
-  if (totalLevels > 0) {
-    text += `⭐ 레벨업! Lv.${user.lv} (+${totalLevels * 5} 스탯포인트)\n`;
+  text += '┌─────────────────┐\n';
+  text += `│ 💰 +${goldGain}G\n`;
+  text += `│ ✨ +${expGain} EXP\n`;
+  text += `│ 📖 이해도 ${understandingExp}/100\n`;
+  text += '└─────────────────┘\n';
+
+  // 광기 변화 (있으면)
+  const madnessGain = user.lastMadnessGain || 0;
+  if (madnessGain > 0) {
+    text += `\n🌀 광기 +${madnessGain}`;
+    if ((user.madness || 0) >= 80) {
+      text += ' ⚠️';
+    }
   }
-  text += `📖 ${enemy.name} 이해도: ${understandingExp}/100\n\n`;
 
   // 드랍 아이템
   if (drop) {
-    text += `🎁 드랍: ${getItemDisplay(drop)}\n`;
+    text += `\n\n💎 ${drop.gradeColor || '⚪'} ${drop.name} 획득!`;
     if (guaranteeRare) {
-      text += `⭐ 보스 첫 킬 보상!\n`;
+      text += ` ⭐ 보스 첫 킬!`;
     }
-  } else {
-    text += `🎁 드랍: 없음\n`;
+  }
+
+  // 레벨업
+  if (totalLevels > 0) {
+    text += `\n\n🌟 LEVEL UP! Lv.${user.lv}`;
+    text += `\n   스탯 포인트 +${totalLevels * 5}`;
   }
 
   // 결과 분기 (보스 vs 일반 몬스터)

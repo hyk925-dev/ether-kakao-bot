@@ -1,5 +1,5 @@
 // ============================================
-// 전투 시스템 v4.0 (패턴 기반)
+// 전투 시스템 v4.1 (데미지 공식 + 직업 시너지)
 // ============================================
 
 const { MONSTERS, MONSTER_TYPES, GRADES } = require('../data/monsters');
@@ -212,55 +212,62 @@ function shuffle(array) {
 }
 
 // ============================================
-// 해석 판정
+// 해석 판정 (v4.1)
 // ============================================
 
 function judgeInterpret(playerChoice, pattern, understandingLevel) {
   const correct = pattern.correct;
-  
+
+  // 이해도 4 이상 = 자동 완벽
   if (understandingLevel >= 4) {
     return {
       result: 'perfect',
-      damageMultiplier: 1.5,
+      damageMultiplier: 2.0,
+      damageTakenMultiplier: 0,
       priority: 'player',
-      message: '✅ 완벽한 해석! 피해 1.5배, 선공'
+      message: '✨ 완벽 해석! 피해 2배, 피격 0'
     };
   }
-  
+
+  // 정답
   if (playerChoice === correct) {
     return {
       result: 'perfect',
-      damageMultiplier: 1.5,
+      damageMultiplier: 2.0,
+      damageTakenMultiplier: 0,
       priority: 'player',
-      message: '✅ 완벽한 해석! 피해 1.5배, 선공'
+      message: '✨ 완벽 해석! 피해 2배, 피격 0'
     };
   }
-  
+
+  // 부분 정답 체크
   const partialPairs = [
     { pattern: '회피', choice: '방어' },
     { pattern: '방어', choice: '역습' },
     { pattern: '역습', choice: '회피' }
   ];
-  
+
   const isPartial = partialPairs.some(
     pair => pair.pattern === correct && pair.choice === playerChoice
   );
-  
+
   if (isPartial) {
     return {
       result: 'partial',
       damageMultiplier: 1.0,
+      damageTakenMultiplier: 1.0,
       priority: 'speed',
-      message: '⚠️ 부분 해석. 피해 그대로, 속도 비교'
+      message: '⚠️ 부분 해석. 피해 그대로'
     };
   }
-  
+
+  // 실패
   return {
     result: 'fail',
-    damageMultiplier: 1.0,
-    damageTakenMultiplier: 1.2,
+    damageMultiplier: 0.5,
+    damageTakenMultiplier: 1.5,
     priority: 'enemy',
-    message: '❌ 해석 실패. 피격 1.2배, 후공'
+    message: '❌ 해석 실패! 피해 0.5배, 피격 1.5배'
   };
 }
 
@@ -411,6 +418,62 @@ function checkSurvival(player) {
 }
 
 // ============================================
+// 직업-선택지 시너지 (v4.1)
+// ============================================
+
+function applyJobChoiceBonus(player, choice, interpretResult, context) {
+  const { calcStats } = require('../utils/calc');
+  const c = calcStats(player);
+
+  // 완벽 해석이 아니면 시너지 없음
+  if (interpretResult.result !== 'perfect') return;
+
+  switch (player.job) {
+    case 'ironblood':
+      // 철혈병 + 방어 = 확정 반격
+      if (choice === '방어') {
+        context.guaranteedCounter = true;
+        context.counterDamage = c.def + (player.stats.vit * 2);
+      }
+      break;
+
+    case 'hunter':
+      // 사냥꾼 + 회피 = 크리 확정 + DEX 보너스 + 스택 2배
+      if (choice === '회피') {
+        context.forceCrit = true;
+        context.bonusDamage = (context.bonusDamage || 0) + (player.stats.dex * 3);
+        player.hunterStacks = Math.min(5, (player.hunterStacks || 0) + 2);
+      }
+      break;
+
+    case 'shaman':
+      // 주술사 + 역습 = 방무 30% + 흡혈 10% 추가
+      if (choice === '역습') {
+        context.defIgnore = (context.defIgnore || 0) + 0.3;
+        context.lifestealBonus = 0.1;
+      }
+      break;
+
+    case 'wanderer':
+      // 방랑자 = HP 30% 이하시 추가 공격 보너스
+      const hpPercent = player.hp / c.maxHp;
+      if (hpPercent <= 0.3) {
+        context.atkBonus = (context.atkBonus || 0) + 1.5;
+      }
+      break;
+
+    case 'scribe':
+      // 기록자 = 이해도 보너스
+      context.understandingBonus = 50;
+      break;
+
+    case 'heretic':
+      // 이단자 = 광기 보너스는 별도 처리
+      break;
+  }
+}
+
+// ============================================
 // 전투 계산
 // ============================================
 
@@ -465,20 +528,44 @@ function calculatePlayerDamage(player, monster, interpretResult, context) {
 function calculateEnemyDamage(monster, player, pattern, interpretResult, context) {
   const { calcStats } = require('../utils/calc');
   const c = calcStats(player);
-  
+
+  // 기본 피해
   let baseDamage = monster.atk * (pattern.dmgMult || 1.0);
-  
-  baseDamage = Math.max(1, baseDamage - c.def * 0.4);
-  
-  if (interpretResult.result === 'fail') {
-    const failMult = context.failDamageTakenMult || 1.2;
-    baseDamage *= failMult;
+
+  // 방어력 감소 (최대 50%까지만)
+  const reduction = Math.min(0.5, c.def / (c.def + 100));
+  baseDamage *= (1 - reduction);
+
+  // 최소 보장 피해 (최대 HP의 5%)
+  const minDamage = Math.floor(c.maxHp * 0.05);
+  baseDamage = Math.max(minDamage, baseDamage);
+
+  // 해석 결과별 피격 배율 적용
+  if (interpretResult.damageTakenMultiplier !== undefined) {
+    baseDamage *= interpretResult.damageTakenMultiplier;
   }
-  
+
+  // 패턴별 오답 페널티
+  if (interpretResult.result === 'fail') {
+    const wrongPenalty = pattern.wrongPenalty || 1.0;
+    baseDamage *= wrongPenalty;
+  }
+
+  // WIL 기반 실패 피해 감소
+  if (interpretResult.result === 'fail' && c.failDamageReduction) {
+    baseDamage *= (1 - c.failDamageReduction / 100);
+  }
+
+  // 기존 피해 감소 (주술사 등)
   if (context.damageTakenReduction) {
     baseDamage *= (1 - context.damageTakenReduction);
   }
-  
+
+  // 고층 추가 피해 (30층+)
+  if (player.floor >= 30) {
+    baseDamage += Math.floor(c.maxHp * 0.03);
+  }
+
   return Math.floor(baseDamage);
 }
 
@@ -634,6 +721,7 @@ module.exports = {
   applyOnAttackPassives,
   applyOnDamagedPassives,
   checkSurvival,
+  applyJobChoiceBonus,
   checkPriority,
   calculatePlayerDamage,
   calculateEnemyDamage,

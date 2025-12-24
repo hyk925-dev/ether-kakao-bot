@@ -103,7 +103,7 @@ const bosses = {
     id: 'boss_8',
     name: '다크 메이지',
     emoji: '👑🧙‍♂️',
-    image: '', // 이미지 없음
+    image: 'https://storage.googleapis.com/ether-rpg.firebasestorage.app/ether/bosses/boss_8_dark_mage.png',
     hp: 200,
     atk: 28,
     def: 5,

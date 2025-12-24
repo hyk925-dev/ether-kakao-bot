@@ -15,24 +15,25 @@ function getEnhanceCost(level) {
 function executeEnhance(user, slot, item) {
   const level = item.enhance || 0;
   if (level >= 10) {
-    return { success: false, message: '최대 강화 단계입니다.' };
+    return { success: false, goldSpent: false, message: '최대 강화 단계입니다.' };
   }
-  
+
   const rate = getEnhanceRate(level);
   const cost = getEnhanceCost(level);
-  
+
   if (user.gold < cost) {
-    return { success: false, message: `골드가 부족합니다. (필요: ${cost}G)` };
+    return { success: false, goldSpent: false, message: `골드가 부족합니다. (필요: ${cost.toLocaleString()}G, 보유: ${user.gold.toLocaleString()}G)` };
   }
-  
+
+  // 골드 차감
   user.gold -= cost;
   const roll = Math.random() * 100;
-  
+
   if (roll < rate) {
     item.enhance = level + 1;
-    return { success: true, message: `강화 성공! +${item.enhance}` };
+    return { success: true, goldSpent: true, message: `강화 성공! +${item.enhance}` };
   } else {
-    return { success: false, message: '강화 실패...' };
+    return { success: false, goldSpent: true, message: '강화 실패...' };
   }
 }
 

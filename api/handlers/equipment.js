@@ -187,8 +187,35 @@ module.exports = async function equipmentHandler(ctx) {
         return res.json(reply(`이미 최대 강화 단계입니다. (+10)`, ['강화', '마을']));
       }
 
-      // executeEnhance 함수 호출
-      return executeEnhance(res, u, userId, slot, saveUser);
+      // 강화 실행
+      const result = executeEnhance(u, slot, item);
+      const displayName = item.nickname || item.name;
+
+      // 골드 차감됐으면 저장 (성공/실패 모두)
+      if (result.goldSpent) {
+        await saveUser(userId, u);
+      }
+
+      if (!result.success) {
+        // 골드 부족은 저장 안 함
+        if (result.message.includes('골드가 부족')) {
+          return res.json(reply(`❌ ${result.message}`, ['강화', '마을']));
+        }
+        // 강화 실패 (골드 소모됨)
+        return res.json(reply(
+          `❌ 강화 실패...\n` +
+          `${item.gradeColor || '⚪'} ${displayName} +${item.enhance || 0} 유지\n\n` +
+          `💰 보유 골드: ${u.gold.toLocaleString()}G`,
+          ['강화', '목록', '마을']
+        ));
+      }
+
+      return res.json(reply(
+        `✅ ${slotName} 강화 성공!\n` +
+        `${item.gradeColor || '⚪'} ${displayName} → +${item.enhance}\n\n` +
+        `💰 보유 골드: ${u.gold.toLocaleString()}G`,
+        ['강화', '목록', '마을']
+      ));
     }
   }
 

@@ -1,14 +1,40 @@
 // ============================================
-// 몬스터 시스템 v4.0 (패턴 기반 전투)
+// 몬스터 시스템 v4.1 (패턴 유형 추가)
 // ============================================
 
 /**
- * v4.0 몬스터 시스템 설계
+ * v4.1 몬스터 시스템 설계
  * - 40종 몬스터, 10개 티어 (1~10층, 11~20층, ..., 91~100층)
  * - 각 몬스터는 고유 패턴 풀 (3~5개)
  * - 패턴: 돌진(회피), 강타(방어), 집중(역습) 등
  * - weight 기반 선택 (합 100)
+ * - 패턴 유형별 오답 페널티 차별화
  */
+
+// ============================================
+// 패턴 유형 정의 (v4.1)
+// ============================================
+const PATTERN_TYPES = {
+  crush: {    // 분쇄 — 반드시 방어
+    answer: '방어',
+    wrongPenalty: 3.0,
+    telegraph: '💀 으르렁거리며 힘을 모은다...'
+  },
+  pierce: {   // 관통 — 반드시 회피
+    answer: '회피',
+    wrongPenalty: 2.5,
+    telegraph: '🔺 날카로운 눈빛으로 급소를 노린다...'
+  },
+  stagger: {  // 빈틈 — 공격 찬스
+    answer: '역습',
+    wrongPenalty: 1.0,
+    telegraph: '💫 비틀거리며 균형을 잃는다...'
+  },
+  normal: {   // 일반
+    wrongPenalty: 1.5,
+    telegraph: '...'
+  }
+};
 
 // ============================================
 // 몬스터 타입 (v3 유지)
@@ -43,6 +69,8 @@ const UNIVERSAL_PATTERNS = {
     id: '돌진',
     name: '돌진',
     correct: '회피',
+    type: 'pierce',
+    wrongPenalty: 2.5,
     dmgMult: 1.2,
     telegraph: {
       0: '적이 움직인다...',
@@ -58,6 +86,8 @@ const UNIVERSAL_PATTERNS = {
     id: '빠른_연타',
     name: '빠른 연타',
     correct: '회피',
+    type: 'pierce',
+    wrongPenalty: 2.5,
     dmgMult: 0.9,
     hitCount: 2,
     telegraph: {
@@ -74,6 +104,8 @@ const UNIVERSAL_PATTERNS = {
     id: '도약_내려찍기',
     name: '도약 내려찍기',
     correct: '회피',
+    type: 'pierce',
+    wrongPenalty: 2.5,
     dmgMult: 1.5,
     telegraph: {
       0: '적이 뛰어오른다',
@@ -90,6 +122,8 @@ const UNIVERSAL_PATTERNS = {
     id: '강타',
     name: '강타',
     correct: '방어',
+    type: 'crush',
+    wrongPenalty: 3.0,
     dmgMult: 1.8,
     telegraph: {
       0: '적이 힘을 모은다',
@@ -105,6 +139,8 @@ const UNIVERSAL_PATTERNS = {
     id: '회전_베기',
     name: '회전 베기',
     correct: '방어',
+    type: 'crush',
+    wrongPenalty: 3.0,
     dmgMult: 1.4,
     defBreak: 0.3,
     telegraph: {
@@ -121,6 +157,8 @@ const UNIVERSAL_PATTERNS = {
     id: '대지_강타',
     name: '대지 강타',
     correct: '방어',
+    type: 'crush',
+    wrongPenalty: 3.0,
     dmgMult: 2.0,
     telegraph: {
       0: '적이 땅을 내려친다',
@@ -137,6 +175,8 @@ const UNIVERSAL_PATTERNS = {
     id: '집중',
     name: '집중',
     correct: '역습',
+    type: 'stagger',
+    wrongPenalty: 1.0,
     dmgMult: 0.3,
     nextTurnBonus: 2.0,
     telegraph: {
@@ -153,6 +193,8 @@ const UNIVERSAL_PATTERNS = {
     id: '기합',
     name: '기합',
     correct: '역습',
+    type: 'stagger',
+    wrongPenalty: 1.0,
     dmgMult: 0.2,
     buffAtk: 0.3,
     buffDuration: 3,
@@ -170,6 +212,8 @@ const UNIVERSAL_PATTERNS = {
     id: '방어_태세',
     name: '방어 태세',
     correct: '역습',
+    type: 'stagger',
+    wrongPenalty: 1.0,
     dmgMult: 0.0,
     defBonus: 0.5,
     telegraph: {
@@ -191,6 +235,8 @@ const UNIVERSAL_PATTERNS = {
     id: '광폭화',
     name: '광폭화',
     correct: '역습',
+    type: 'stagger',
+    wrongPenalty: 1.0,
     dmgMult: 0.4,
     buffAtk: 0.5,
     buffDuration: 2,
@@ -210,6 +256,8 @@ const UNIVERSAL_PATTERNS = {
     id: '암흑_베기',
     name: '암흑 베기',
     correct: '방어',
+    type: 'crush',
+    wrongPenalty: 3.0,
     dmgMult: 2.2,
     defBreak: 0.4,
     telegraph: {
@@ -227,6 +275,8 @@ const UNIVERSAL_PATTERNS = {
     id: '독_브레스',
     name: '독 브레스',
     correct: '방어',
+    type: 'crush',
+    wrongPenalty: 3.0,
     dmgMult: 1.4,
     dot: { type: 'poison', duration: 4, dmgPerTurn: 0.1 },
     telegraph: {
@@ -244,6 +294,8 @@ const UNIVERSAL_PATTERNS = {
     id: '어둠의_구체',
     name: '어둠의 구체',
     correct: '방어',
+    type: 'crush',
+    wrongPenalty: 3.0,
     dmgMult: 2.0,
     telegraph: {
       0: '어둠이 응축된다',
@@ -260,6 +312,8 @@ const UNIVERSAL_PATTERNS = {
     id: '심판의_빛',
     name: '심판의 빛',
     correct: '방어',
+    type: 'crush',
+    wrongPenalty: 3.0,
     dmgMult: 2.5,
     defBreak: 0.5,
     telegraph: {
@@ -277,6 +331,8 @@ const UNIVERSAL_PATTERNS = {
     id: '촉수_휘감기',
     name: '촉수 휘감기',
     correct: '회피',
+    type: 'pierce',
+    wrongPenalty: 2.5,
     dmgMult: 1.4,
     bindDuration: 2,
     telegraph: {
@@ -294,6 +350,8 @@ const UNIVERSAL_PATTERNS = {
     id: '정신_침식',
     name: '정신 침식',
     correct: '방어',
+    type: 'crush',
+    wrongPenalty: 3.0,
     dmgMult: 1.6,
     madnessGain: 15,
     telegraph: {
@@ -1801,6 +1859,7 @@ const HIDDEN_BOSS = {
 };
 
 module.exports = {
+  PATTERN_TYPES,
   MONSTER_TYPES,
   GRADES,
   UNIVERSAL_PATTERNS,

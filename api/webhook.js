@@ -172,7 +172,7 @@ app.post('/api/webhook', async (req, res) => {
       u.currentEnemy = null;
       u.inBattle = false;
 
-      await saveUser(u);
+      await saveUser(userId, u);
 
       return res.json(reply(
         "🔄 상태가 초기화되었습니다.\n마을로 이동합니다.",
@@ -185,7 +185,7 @@ app.post('/api/webhook', async (req, res) => {
       u.currentBattle = null;
       u.battleState = null;
 
-      await saveUser(u);
+      await saveUser(userId, u);
 
       return res.json(reply(
         "🏠 마을로 강제 이동했습니다.",

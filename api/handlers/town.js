@@ -150,14 +150,14 @@ module.exports = async function townHandler(ctx) {
     u.hp = c.maxHp;
     u.focus = u.maxFocus || 100;
     u.skillCd = 0;
-    
-    // 광기 감소
+
+    // 광기 감소 — 모든 직업 적용
     let madnessDecay = 0;
-    if (u.job === 'heretic') {
+    if ((u.madness || 0) > 0) {
       madnessDecay = MADNESS_SYSTEM?.decay?.rest || 20;
-      u.madness = Math.max(0, (u.madness || 0) - madnessDecay);
+      u.madness = Math.max(0, u.madness - madnessDecay);
     }
-    
+
     // 저주 해제 확률
     let curseRemoved = false;
     if ((u.curses || []).length > 0 && Math.random() < (CURSE_CONFIG?.removal?.restChance || 0.1)) {
@@ -165,15 +165,15 @@ module.exports = async function townHandler(ctx) {
       const curseData = CURSES[removed.id];
       curseRemoved = curseData ? curseData.name : '저주';
     }
-    
+
     await saveUser(userId, u);
-    
+
     let restText = `🏠 마을에서 편히 쉬었다.\n\n`;
     restText += `❤️ HP 완전 회복: ${u.hp}/${c.maxHp}\n`;
     restText += `⚡ 집중력 회복: ${u.focus}/${u.maxFocus || 100}`;
-    if (madnessDecay > 0) restText += `\n🌀 광기 -${madnessDecay}`;
+    if (madnessDecay > 0) restText += `\n🧘 광기 -${madnessDecay} (현재: ${u.madness})`;
     if (curseRemoved) restText += `\n✨ ${curseRemoved} 해제됨!`;
-    
+
     return res.json(reply(restText, ['전투', '탐사', '상점', '마을']));
   }
   
@@ -283,14 +283,20 @@ module.exports = async function townHandler(ctx) {
     u.floor = targetFloor;
     u.floorKills = 0;
     u.bossAvailable = false;
-    const decayAmount = MADNESS_SYSTEM?.decay?.perFloor || 5;
-    u.madness = Math.max(0, (u.madness || 0) - decayAmount);
+
+    // 광기 감소 (광기가 있을 때만)
+    let madnessDecay = 0;
+    if ((u.madness || 0) > 0) {
+      madnessDecay = MADNESS_SYSTEM?.decay?.perFloor || 5;
+      u.madness = Math.max(0, u.madness - madnessDecay);
+    }
     await saveUser(userId, u);
 
-    return res.json(reply(
-      `🏔️ ${targetFloor}층으로 이동!\n🌀 광기 -${decayAmount}`,
-      ['전투', '탐사', '마을']
-    ));
+    let moveText = `🏔️ ${targetFloor}층으로 이동!`;
+    if (madnessDecay > 0) {
+      moveText += `\n🧘 광기 -${madnessDecay} (현재: ${u.madness})`;
+    }
+    return res.json(reply(moveText, ['전투', '탐사', '마을']));
   }
   
   // ========================================

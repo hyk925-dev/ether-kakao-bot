@@ -693,11 +693,45 @@ module.exports = async function battleHandler(ctx) {
         return res.json(reply('이 층에는 보스가 없습니다.', ['전투', '마을']));
       }
 
+      // 패턴 문자열 배열을 객체 배열로 변환 (v4.0 호환)
+      const convertedPatterns = (boss.patterns || []).map(patternName => {
+        const patternData = getBossPattern(patternName);
+
+        // correct 속성 설정 (없으면 패턴 특성에 따라 기본값)
+        let correct = patternData.correct;
+        if (!correct) {
+          if (patternData.multiplier >= 1.5) correct = '방어';      // 강공격 → 방어
+          else if (patternData.multiplier === 0) correct = '역습';  // 버프/재생 → 역습
+          else correct = '회피';                                     // 일반 → 회피
+        }
+
+        // telegraph 문자열을 객체로 변환
+        let telegraph = patternData.telegraph;
+        if (typeof telegraph === 'string') {
+          telegraph = {
+            0: telegraph,
+            1: telegraph,
+            2: telegraph,
+            3: telegraph,
+            4: `⚠️ ${telegraph}`
+          };
+        }
+
+        return {
+          ...patternData,
+          id: patternName,
+          correct,
+          telegraph,
+          weight: 1
+        };
+      });
+
       // 보스 객체 생성 (isBoss 플래그 추가)
       const bossMonster = {
         ...boss,
         hp: boss.hp,
         maxHp: boss.hp,
+        patterns: convertedPatterns,
         isBoss: true
       };
 

@@ -89,7 +89,13 @@ module.exports = async function equipmentHandler(ctx) {
         text += `... 외 ${inventory.length - 10}개\n`;
       }
     }
-    
+
+    // 안내 텍스트 (인벤토리에 아이템이 있을 때만)
+    if (inventory.length > 0) {
+      text += '\n💡 "장착1", "판매1" 입력 가능\n';
+      text += '💡 번호만 입력하면 상세 보기';
+    }
+
     return res.json(reply(text, ['강화', '판매', '장비', '마을']));
   }
   
@@ -178,10 +184,11 @@ module.exports = async function equipmentHandler(ctx) {
   }
   
   // ========================================
-  // 판매N
+  // 판매N, N번판매 (동의어)
   // ========================================
-  if (msg.match(/^판매\d+$/)) {
-    const idx = parseInt(msg.replace('판매', '')) - 1;
+  const sellMatch = msg.match(/^판매(\d+)$/) || msg.match(/^(\d+)번판매$/);
+  if (sellMatch) {
+    const idx = parseInt(sellMatch[1]) - 1;
     const item = inventory[idx];
     
     if (!item) {
@@ -204,10 +211,11 @@ module.exports = async function equipmentHandler(ctx) {
   }
   
   // ========================================
-  // 장착 (인벤N)
+  // 장착 (인벤N, 장착N, N번장착 동의어)
   // ========================================
-  if (msg.match(/^인벤\d+$/)) {
-    const idx = parseInt(msg.replace('인벤', '')) - 1;
+  const equipMatch = msg.match(/^인벤(\d+)$/) || msg.match(/^장착(\d+)$/) || msg.match(/^(\d+)번장착$/);
+  if (equipMatch) {
+    const idx = parseInt(equipMatch[1]) - 1;
     const item = inventory[idx];
     
     if (!item) {

@@ -9,7 +9,7 @@ const { STAT_NAMES, STAT_KOREAN, MADNESS_SYSTEM, CURSE_CONFIG } = require('../..
 const { CURSES } = require('../../data/items');
 const { getReqExp, calcStats } = require('../../utils/calc');
 const { reply, replyWithImage } = require('../../utils/response');
-const { getTownText } = require('../../utils/text');
+const { getTownText, createHPBar } = require('../../utils/text');
 
 // ============================================
 // Main Handler
@@ -22,37 +22,13 @@ module.exports = async function townHandler(ctx) {
   // 마을
   // ========================================
   if (msg === '마을') {
-    let townText = `🏔️ 에테르의 탑 — ${u.floor || 1}층\n`;
-    
-    // 공지 알림
-    if (u.lastSeenNotice !== NOTICE.version) {
-      townText += `📢 ${NOTICE.version} 업데이트! (@공지)\n`;
-    }
-    
-    townText += `━━━━━━━━━━━━━━━\n\n`;
-    
-    // 첫 방문 튜토리얼
-    if (!u.tutorialDone) {
-      townText += `💡 첫 모험 가이드:\n`;
-      townText += `• [전투] - 몬스터와 싸워 경험치/골드\n`;
-      townText += `• [휴식] - HP 완전 회복\n`;
-      townText += `• [장비] - 획득한 장비 장착\n`;
-      townText += `• [상점] - 물약 구매\n\n`;
-      
-      u.tutorialDone = true;
-      await saveUser(userId, u);
-      
-      const jobImg = JOB_IMAGES[u.job];
-      if (jobImg) {
-        return res.json(replyWithImage(jobImg, townText, ['전투', '휴식', '장비', '상점', '@도움말']));
-      }
-      return res.json(reply(townText, ['전투', '휴식', '장비', '상점', '@도움말']));
-    }
-    
-    // 레벨업 체크
+    const floor = u.floor || 1;
+    const goalFloor = Math.ceil(floor / 10) * 10; // 목표층 (10, 20, 30...)
+
+    // 레벨업 체크 (먼저 처리)
     let levelUpMsg = '';
     let totalLevels = 0;
-    
+
     while ((u.exp || 0) >= getReqExp(u.lv || 1)) {
       const req = getReqExp(u.lv || 1);
       u.lv = (u.lv || 1) + 1;
@@ -61,30 +37,65 @@ module.exports = async function townHandler(ctx) {
       u.statPoints = (u.statPoints || 0) + 3;
       totalLevels++;
     }
-    
+
     if (totalLevels > 0) {
       const nc = calcStats(u);
       u.hp = nc.maxHp;
       u.maxHp = nc.maxHp;
       u.focus = u.maxFocus || 100;
-      levelUpMsg = `\n🌟✨ 레벨 업! Lv.${u.lv} (+${totalLevels * 3}점)`;
-      
+      levelUpMsg = `\n\n🌟✨ 레벨 업! Lv.${u.lv} (+${totalLevels * 3}점)`;
+
       // maxLevel 갱신
       if (u.lv > (u.maxLevel || 1)) {
         u.maxLevel = u.lv;
       }
-      
+
       await saveUser(userId, u);
     }
-    
-    townText += getTownText(u).split('\n').slice(2).join('\n');
+
+    // 스탯 계산 (레벨업 후)
+    const nc = calcStats(u);
+    const hpBar = createHPBar(u.hp || 0, nc.maxHp || 1, 10);
+
+    // 새 마을 형식
+    let townText = `━━━━━━━━━━━━━━━━\n`;
+    townText += `🏘️ 마을\n`;
+    townText += `━━━━━━━━━━━━━━━━\n`;
+    townText += `👤 ${u.name} Lv.${u.lv || 1}\n`;
+    townText += `❤️ [${hpBar}] ${u.hp || 0}/${nc.maxHp}\n`;
+    townText += `💰 ${(u.gold || 0).toLocaleString()}G | 🌀 광기 ${u.madness || 0}\n\n`;
+    townText += `🏔️ 현재: ${floor}층\n`;
+    townText += `🎯 목표: ${goalFloor}층 보스 처치`;
+
+    // 공지 알림
+    if (u.lastSeenNotice !== NOTICE.version) {
+      townText += `\n\n📢 ${NOTICE.version} 업데이트! (@공지)`;
+    }
+
+    // 스탯 포인트 알림
+    if ((u.statPoints || 0) > 0) {
+      townText += `\n\n⭐ 미배분 스탯 ${u.statPoints}점!`;
+    }
+
     townText += levelUpMsg;
-    
+
+    // 첫 방문 튜토리얼
+    if (!u.tutorialDone) {
+      townText += `\n\n💡 첫 모험 가이드:\n`;
+      townText += `• [전투] - 몬스터와 싸워 경험치/골드\n`;
+      townText += `• [장비] - 획득한 장비 장착\n`;
+      townText += `• [상점] - 물약 구매\n`;
+      townText += `• [더보기] - 탐사, 휴식 등`;
+
+      u.tutorialDone = true;
+      await saveUser(userId, u);
+    }
+
     const jobImg = JOB_IMAGES[u.job];
     if (jobImg) {
-      return res.json(replyWithImage(jobImg, townText, ['전투', '휴식', '장비', '상점', '상태', '더보기']));
+      return res.json(replyWithImage(jobImg, townText, ['전투', '장비', '상점', '더보기']));
     }
-    return res.json(reply(townText, ['전투', '휴식', '장비', '상점', '상태', '더보기']));
+    return res.json(reply(townText, ['전투', '장비', '상점', '더보기']));
   }
   
   // ========================================

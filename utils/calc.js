@@ -1,5 +1,5 @@
 // ============================================
-// 계산 함수 v3.9 (전우 시스템)
+// 계산 함수 v4.1 (스탯 공식 수정)
 // ============================================
 const { JOBS } = require('../data/jobs');
 const { ENHANCE_BONUS } = require('../data/items');
@@ -27,24 +27,28 @@ function calcStats(p) {
   
   // 기본 전투 스탯
   let atk = 10 + s.str * 3 + s.dex * 0.5;
-  let def = 5 + s.vit * 2 + s.wil * 0.8;
-  let maxHp = 80 + s.vit * 20 + s.str * 2;
-  
+  let def = 5 + s.vit * 2;  // WIL 제거
+  let maxHp = 80 + s.vit * 12 + s.str * 2;  // VIT 20→12 너프
+
   // 확률 스탯 (%)
-  let evasion = Math.min(5 + s.dex * 1.2 + s.luk * 0.5, 60);
+  let evasion = Math.min(5 + s.dex * 1.5 + s.luk * 0.3, 75);  // 캡 60→75, DEX 강화
   let critRate = Math.min(5 + s.dex * 0.8 + s.luk * 0.6, 80);
   let critDmg = 150 + s.luk * 3;
-  
+
   // 해석/스킬
-  let interpret = Math.min(10 + s.int * 3 + s.wil * 0.5, 95);
-  let skillPower = 100 + s.int * 2;
+  let interpret = Math.min(10 + s.int * 2 + s.wil * 1.5, 90);  // 캡 95→90, WIL 강화
+  let skillPower = 100 + s.int * 4;  // 2→4 버프
+
+  // 의지 기반 신규 스탯
+  let failDamageReduction = s.wil * 0.5;  // 해석 실패 시 피해 감소 (%)
+  let madnessResist = s.wil * 2;  // 광기 증가량 감소 (%)
   
   // 유틸
   let dropBonus = s.luk * 0.5;
   
   // 직업 패시브 보너스
   if (job?.passive?.effect?.interpretBonus) {
-    interpret = Math.min(interpret * (1 + job.passive.effect.interpretBonus), 95);
+    interpret = Math.min(interpret * (1 + job.passive.effect.interpretBonus), 90);
   }
   
   // 저주 5종 적용
@@ -101,12 +105,14 @@ function calcStats(p) {
     atk: Math.floor(Math.max(1, atk)),
     def: Math.floor(Math.max(0, def)),
     maxHp: Math.floor(Math.max(20, maxHp)),
-    evasion: clamp(Math.floor(evasion), 0, 60),
+    evasion: clamp(Math.floor(evasion), 0, 75),
     critRate: clamp(Math.floor(critRate), 0, 80),
     critDmg: Math.floor(critDmg),
-    interpret: clamp(Math.floor(interpret), 0, 95),
+    interpret: clamp(Math.floor(interpret), 0, 90),
     skillPower: Math.floor(skillPower),
-    dropBonus: Math.floor(dropBonus)
+    dropBonus: Math.floor(dropBonus),
+    failDamageReduction: Math.floor(failDamageReduction),
+    madnessResist: Math.floor(madnessResist)
   };
 }
 

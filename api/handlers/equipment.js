@@ -1,5 +1,5 @@
 // ============================================
-// Equipment Handler v4.0
+// Equipment Handler v4.1
 // 장비 관리 (목록, 강화, 판매)
 // ============================================
 
@@ -7,19 +7,10 @@ const { reply } = require('../../utils/response');
 const { getItemDisplay, getItemStatText } = require('../../systems/items');
 const { getEnhanceRate, getEnhanceCost, executeEnhance } = require('../../systems/enhance');
 
+const { getSlotIcon } = require('../../utils/text');
 // ============================================
 // 헬퍼 함수
 // ============================================
-
-function getSlotIcon(slot) {
-  const icons = {
-    weapon: '⚔️',
-    armor: '🛡️',
-    accessory: '💍',
-    relic: '🔮'
-  };
-  return icons[slot] || '📦';
-}
 
 function getSlotName(slot) {
   const names = {
@@ -57,43 +48,68 @@ module.exports = async function equipmentHandler(ctx) {
   // 2단계-A: 목록
   // ========================================
   if (msg === '목록') {
-    let text = '📦 장비 목록\n━━━━━━━━━━━━━━━━━━\n';
+    let text = '📦 장비 관리\n━━━━━━━━━━━━━━━━━━\n\n';
     text += '【 장착 중 】\n';
-    
+
     const slots = ['weapon', 'armor', 'accessory', 'relic'];
     const equipped = u.equipment || {};
-    
+
+    let totalAtk = 0, totalDef = 0, totalHp = 0;
+
     slots.forEach(slot => {
       const item = equipped[slot];
+      const icon = getSlotIcon(slot);
+
       if (item) {
-        const icon = getSlotIcon(slot);
         const displayName = item.nickname || item.name;
         const enhance = item.enhance > 0 ? ` +${item.enhance}` : '';
-        text += `${icon} ${displayName}${enhance}\n`;
+
+        // 주요 스탯 표시
+        let statText = '';
+        if (item.atk) { statText = `ATK +${item.atk}`; totalAtk += item.atk; }
+        if (item.def) { statText = `DEF +${item.def}`; totalDef += item.def; }
+        if (item.hp) { statText = `HP +${item.hp}`; totalHp += item.hp; }
+
+        text += `${icon} ${displayName}${enhance}  ${statText}\n`;
       } else {
-        text += `${getSlotIcon(slot)} ${getSlotName(slot)}: (없음)\n`;
+        text += `${icon} —\n`;
       }
     });
-    
-    text += '\n【 인벤토리 】\n';
+
+    // 총합 표시
+    text += `\n━━━━━━━━━━━━━━━━━━\n`;
+    const totals = [];
+    if (totalAtk > 0) totals.push(`ATK +${totalAtk}`);
+    if (totalDef > 0) totals.push(`DEF +${totalDef}`);
+    if (totalHp > 0) totals.push(`HP +${totalHp}`);
+    text += `📊 총합: ${totals.length > 0 ? totals.join(' | ') : '없음'}\n`;
+
+    // 인벤토리
+    text += `\n【 인벤토리 (${inventory.length}개) 】\n`;
+
     if (inventory.length === 0) {
       text += '비어있음\n';
     } else {
-      inventory.slice(0, 10).forEach((item, i) => {
+      inventory.slice(0, 8).forEach((item, i) => {
         const displayName = item.nickname || item.name;
         const enhance = item.enhance > 0 ? ` +${item.enhance}` : '';
-        text += `${i + 1}. ${item.gradeColor || '⚪'} ${displayName}${enhance}\n`;
+
+        // 주요 스탯
+        let statText = '';
+        if (item.atk) statText = `ATK +${item.atk}`;
+        else if (item.def) statText = `DEF +${item.def}`;
+        else if (item.hp) statText = `HP +${item.hp}`;
+
+        text += `${i + 1}. ${item.gradeColor || '⚪'} ${displayName}${enhance}  ${statText}\n`;
       });
-      
-      if (inventory.length > 10) {
-        text += `... 외 ${inventory.length - 10}개\n`;
+
+      if (inventory.length > 8) {
+        text += `... 외 ${inventory.length - 8}개\n`;
       }
     }
 
-    // 안내 텍스트 (인벤토리에 아이템이 있을 때만)
     if (inventory.length > 0) {
-      text += '\n💡 "장착1", "판매1" 입력 가능\n';
-      text += '💡 번호만 입력하면 상세 보기';
+      text += `\n💡 번호 입력 → 상세 | "장착1" → 장착`;
     }
 
     return res.json(reply(text, ['강화', '판매', '장비', '마을']));

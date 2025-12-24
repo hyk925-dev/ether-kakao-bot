@@ -4,8 +4,8 @@
 // ============================================
 
 const { JOBS } = require('../../data');
-const { BOSSES } = require('../../data/bosses');
-const { getBoss, getBossPattern } = require('../../bosses');
+const { BOSSES: REGION_BOSSES } = require('../../data/bosses');
+const { getBoss, getBossPattern, isRegionBossFloor } = require('../../bosses');
 const { getMonsterImage } = require('../../data/images');
 const { generateItem, getItemDisplay } = require('../../systems/items');
 const { reply, replyWithImage } = require('../../utils/response');
@@ -606,59 +606,145 @@ module.exports = async function battleHandler(ctx) {
       return res.json(reply('아직 보스가 출현하지 않았습니다.\n몬스터를 더 처치해주세요.', ['전투', '마을']));
     }
 
-    // 보스 데이터 가져오기
-    const boss = getBoss(u.floor || 1);
-    if (!boss) {
-      return res.json(reply('이 층에는 보스가 없습니다.', ['전투', '마을']));
+    const currentFloor = u.floor || 1;
+
+    // 10층 단위 대보스 vs 일반 보스 분기
+    if (isRegionBossFloor(currentFloor)) {
+      // ========================================
+      // 대보스 (10층 단위) - data/bosses.js
+      // ========================================
+      const regionBoss = REGION_BOSSES[currentFloor];
+      if (!regionBoss) {
+        return res.json(reply('이 층에는 대보스가 없습니다.', ['전투', '마을']));
+      }
+
+      // 대보스 객체 생성
+      const bossMonster = {
+        id: regionBoss.id,
+        name: regionBoss.name,
+        hp: regionBoss.baseHp,
+        maxHp: regionBoss.baseHp,
+        atk: regionBoss.baseAtk,
+        def: regionBoss.baseDef,
+        exp: regionBoss.baseExp,
+        gold: regionBoss.baseGold,
+        spd: regionBoss.spd,
+        desc: regionBoss.desc,
+        type: regionBoss.type,
+        phases: regionBoss.phases,
+        currentPhase: 1,
+        isBoss: true,
+        isRegionBoss: true,
+        firstKillReward: regionBoss.firstKillReward
+      };
+
+      // 첫 페이즈 패턴 설정
+      const phase1 = regionBoss.phases[0];
+      bossMonster.patterns = phase1.patterns;
+
+      // 전투 통계 기록 시작
+      recordBattleStart(u, bossMonster);
+
+      // 이해도 레벨 확인
+      const understandingLevel = getBattleUnderstandingLevel(u, bossMonster);
+
+      // 패턴 선택
+      const pattern = selectPattern(bossMonster);
+
+      // 텔레그래프 생성
+      const telegraph = getTelegraph(pattern, understandingLevel);
+      const choices = getChoices(pattern, understandingLevel);
+
+      // 전투 상태 저장
+      u.phase = 'battle';
+      u.monster = bossMonster;
+      u.currentPattern = pattern;
+      u.understandingLevel = understandingLevel;
+      u.battleTurn = 1;
+      u.interpretStreak = 0;
+      u.hunterStacks = 0;
+      u.usedSurvival = false;
+      u.potionsUsedInBattle = 0;
+
+      await saveUser(userId, u);
+
+      // 대보스 전투 시작 메시지
+      let text = `━━━━━━━━━━━━━━━━━━\n`;
+      text += `🔥🔥 ${currentFloor}층 대보스 🔥🔥\n`;
+      text += `👹 ${regionBoss.name}\n`;
+      text += `"${regionBoss.desc}"\n\n`;
+      text += `HP: ${regionBoss.baseHp} | ATK: ${regionBoss.baseAtk}\n`;
+      text += `페이즈: 1/${regionBoss.phases.length}\n`;
+      text += `━━━━━━━━━━━━━━━━━━\n\n`;
+      text += `⚔️ 대보스전 시작!\n\n`;
+      text += `📖 전조\n"${telegraph}"`;
+
+      const validChoices = choices.filter(c => c !== '???');
+      const buttons = [...validChoices, '스킬', '물약', '도망'].slice(0, 6);
+
+      return res.json(reply(text, buttons));
+
+    } else {
+      // ========================================
+      // 일반 보스 (1~9층) - bosses.js
+      // ========================================
+      const boss = getBoss(currentFloor);
+      if (!boss) {
+        return res.json(reply('이 층에는 보스가 없습니다.', ['전투', '마을']));
+      }
+
+      // 보스 객체 생성 (isBoss 플래그 추가)
+      const bossMonster = {
+        ...boss,
+        hp: boss.hp,
+        maxHp: boss.hp,
+        isBoss: true
+      };
+
+      // 전투 통계 기록 시작
+      recordBattleStart(u, bossMonster);
+
+      // 이해도 레벨 확인
+      const understandingLevel = getBattleUnderstandingLevel(u, bossMonster);
+
+      // 패턴 선택
+      const pattern = selectPattern(bossMonster);
+
+      // 텔레그래프 생성
+      const telegraph = getTelegraph(pattern, understandingLevel);
+      const choices = getChoices(pattern, understandingLevel);
+
+      // 전투 상태 저장
+      u.phase = 'battle';
+      u.monster = bossMonster;
+      u.currentPattern = pattern;
+      u.understandingLevel = understandingLevel;
+      u.battleTurn = 1;
+      u.interpretStreak = 0;
+      u.hunterStacks = 0;
+      u.usedSurvival = false;
+      u.potionsUsedInBattle = 0;
+
+      await saveUser(userId, u);
+
+      // 보스 전투 시작 메시지
+      let text = `━━━━━━━━━━━━━━━━━━\n`;
+      text += `🔥 ${boss.emoji} ${boss.name}\n`;
+      text += `${boss.description}\n\n`;
+      text += `HP: ${boss.hp}\n`;
+      text += `━━━━━━━━━━━━━━━━━━\n\n`;
+      text += `⚔️ 보스전 시작!\n\n`;
+      text += `📖 전조\n"${telegraph}"`;
+
+      const validChoices = choices.filter(c => c !== '???');
+      const buttons = [...validChoices, '스킬', '물약', '도망'].slice(0, 6);
+
+      // 보스 이미지가 있으면 함께 표시
+      if (boss.image) {
+        return res.json(replyWithImage(boss.image, text, buttons));
+      }
+      return res.json(reply(text, buttons));
     }
-
-    // 보스 객체 생성 (isBoss 플래그 추가)
-    const bossMonster = {
-      ...boss,
-      hp: boss.hp,
-      maxHp: boss.hp,
-      isBoss: true
-    };
-
-    // 전투 통계 기록 시작
-    recordBattleStart(u, bossMonster);
-
-    // 이해도 레벨 확인
-    const understandingLevel = getBattleUnderstandingLevel(u, bossMonster);
-
-    // 패턴 선택
-    const pattern = selectPattern(bossMonster);
-
-    // 텔레그래프 생성
-    const telegraph = getTelegraph(pattern, understandingLevel);
-    const choices = getChoices(pattern, understandingLevel);
-
-    // 전투 상태 저장
-    u.phase = 'battle';
-    u.monster = bossMonster;
-    u.currentPattern = pattern;
-    u.understandingLevel = understandingLevel;
-    u.battleTurn = 1;
-    u.interpretStreak = 0;
-    u.hunterStacks = 0;
-    u.usedSurvival = false;
-    u.potionsUsedInBattle = 0;
-
-    await saveUser(userId, u);
-
-    // 보스 전투 시작 메시지
-    let text = `━━━━━━━━━━━━━━━━━━\n`;
-    text += `🔥 ${boss.emoji} ${boss.name}\n`;
-    text += `${boss.description}\n\n`;
-    text += `HP: ${boss.hp}\n`;
-    text += `━━━━━━━━━━━━━━━━━━\n\n`;
-    text += `⚔️ 보스전 시작!\n\n`;
-    text += `📖 전조\n"${telegraph}"`;
-
-    const validChoices = choices.filter(c => c !== '???');
-    const buttons = [...validChoices, '스킬', '물약', '도망'].slice(0, 6);
-
-    return res.json(reply(text, buttons));
   }
 
   // ========================================

@@ -59,6 +59,20 @@ function getRequiredKills(floor) {
 }
 
 /**
+ * 층별 보스 출현 여부
+ * @param {number} floor - 현재 층
+ * @returns {boolean} 보스 출현 여부
+ */
+function shouldBossAppear(floor) {
+  // 1~9층: 일반 보스 있음
+  if (floor >= 1 && floor <= 9) return true;
+  // 10층 단위: 대보스 있음
+  if (floor % 10 === 0 && floor > 0) return true;
+  // 나머지 (11~19, 21~29 등): 보스 없음
+  return false;
+}
+
+/**
  * 층 진행도 바
  * @param {number} current - 현재 처치 수
  * @param {number} max - 필요 처치 수
@@ -226,7 +240,16 @@ async function handleVictory(user, enemy, res, combatLog, saveUser, userId) {
     // 보스 출현 조건 체크
     const required = getRequiredKills(user.floor || 1);
     if (user.floorKills >= required && !user.bossAvailable) {
-      user.bossAvailable = true;
+      if (shouldBossAppear(user.floor)) {
+        // 보스 있는 층 → 보스 출현
+        user.bossAvailable = true;
+      } else {
+        // 보스 없는 층 → 바로 클리어
+        user.floorKills = 0;
+        user.bossAvailable = false;
+        user.maxFloor = Math.max(user.maxFloor || user.floor, user.floor + 1);
+        user.floorCleared = user.floor;  // 클리어 표시용
+      }
     }
   }
 
@@ -325,17 +348,32 @@ async function handleVictory(user, enemy, res, combatLog, saveUser, userId) {
 
     if (user.bossAvailable) {
       // 보스 출현
-      text += `⚠️ ${floor}층 보스 출현!\n`;
+      text += `⚠️ ${floor}층 보스 출현!
+`;
       text += `🔥 보스에게 도전할 수 있습니다!`;
       buttons = ['🔥 보스 도전', '전투', '마을'];
+    } else if (user.floorCleared === floor) {
+      // 보스 없는 층 클리어 (11~19, 21~29 등)
+      const nextFloor = floor + 1;
+      text += `🎉 ${floor}층 클리어!
+`;
+      text += `🔓 ${nextFloor}층 해금됨`;
+      buttons = [`${nextFloor}층으로`, `${floor}층 파밍`, '마을'];
+      user.floorCleared = null;  // 표시 후 초기화
     } else {
-      // 보스 미출현
+      // 보스 미출현 (진행 중)
       const progressBar = getProgressBar(floorKills, required);
       const remaining = required - floorKills;
-      text += `📍 ${floor}층 진행: ${progressBar} ${floorKills}/${required}\n`;
-      text += `💡 ${remaining}마리 더 처치하면 보스 출현!`;
+      if (shouldBossAppear(floor)) {
+        text += `📍 ${floor}층 진행: ${progressBar} ${floorKills}/${required}
+`;
+        text += `💡 ${remaining}마리 더 처치하면 보스 출현!`;
+      } else {
+        text += `📍 ${floor}층 진행: ${progressBar} ${floorKills}/${required}
+`;
+        text += `💡 ${remaining}마리 더 처치하면 ${floor + 1}층 해금!`;
+      }
     }
-
     text += `\n━━━━━━━━━━━━━━━━━━`;
   }
 

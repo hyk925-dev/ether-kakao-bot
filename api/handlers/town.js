@@ -167,19 +167,81 @@ module.exports = async function townHandler(ctx) {
     ));
   }
   
+  // ========================================
+  // N층으로 (보스 클리어 후 다음 층 이동)
+  // ========================================
+  const nextFloorMatch = msg.match(/^(\d+)층으로$/);
+  if (nextFloorMatch) {
+    const targetFloor = parseInt(nextFloorMatch[1]);
+
+    if (targetFloor > (u.maxFloor || 1)) {
+      return res.json(reply(
+        `❌ ${targetFloor}층은 아직 해금되지 않았습니다.\n현재 최대: ${u.maxFloor || 1}층`,
+        ['마을']
+      ));
+    }
+
+    u.floor = targetFloor;
+    u.floorKills = 0;
+    u.bossAvailable = false;
+    await saveUser(userId, u);
+
+    let text = `━━━━━━━━━━━━━━━━━━\n`;
+    text += `📍 ${targetFloor}층 도착!\n`;
+    text += `🎯 목표: ${targetFloor}층 보스 처치\n`;
+    text += `━━━━━━━━━━━━━━━━━━`;
+
+    return res.json(reply(text, ['전투', '마을']));
+  }
+
+  // ========================================
+  // N층 파밍 (이전 층으로 파밍)
+  // ========================================
+  const farmFloorMatch = msg.match(/^(\d+)층\s?파밍$/);
+  if (farmFloorMatch) {
+    const targetFloor = parseInt(farmFloorMatch[1]);
+
+    if (targetFloor > (u.maxFloor || 1)) {
+      return res.json(reply(
+        `❌ ${targetFloor}층은 아직 해금되지 않았습니다.\n현재 최대: ${u.maxFloor || 1}층`,
+        ['마을']
+      ));
+    }
+
+    u.floor = targetFloor;
+    u.floorKills = 0;
+    u.bossAvailable = false;
+    await saveUser(userId, u);
+
+    let text = `━━━━━━━━━━━━━━━━━━\n`;
+    text += `📍 ${targetFloor}층으로 이동 (파밍)\n`;
+    text += `💡 이미 클리어한 층입니다.\n`;
+    text += `━━━━━━━━━━━━━━━━━━`;
+
+    return res.json(reply(text, ['전투', '마을']));
+  }
+
+  // ========================================
+  // N층 (일반 층 이동)
+  // ========================================
   const floorMatch = msg.match(/^(\d+)층$/);
   if (floorMatch) {
     const targetFloor = parseInt(floorMatch[1]);
-    
+
     if (targetFloor > (u.maxFloor || 1)) {
-      return res.json(reply('아직 도달하지 못한 층입니다.', ['층이동', '마을']));
+      return res.json(reply(
+        `❌ ${targetFloor}층은 아직 해금되지 않았습니다.\n현재 최대: ${u.maxFloor || 1}층`,
+        ['층이동', '마을']
+      ));
     }
-    
+
     u.floor = targetFloor;
+    u.floorKills = 0;
+    u.bossAvailable = false;
     const decayAmount = MADNESS_SYSTEM?.decay?.perFloor || 5;
     u.madness = Math.max(0, (u.madness || 0) - decayAmount);
     await saveUser(userId, u);
-    
+
     return res.json(reply(
       `🏔️ ${targetFloor}층으로 이동!\n🌀 광기 -${decayAmount}`,
       ['전투', '탐사', '마을']

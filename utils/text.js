@@ -382,9 +382,10 @@ ${tips.join('\n')}`;
 }
 
 // ============================================
-// HP 바 생성
+// UI 유틸 함수 (v4.1)
 // ============================================
 
+// HP 바 생성
 function createHPBar(current, max, length = 10) {
   const percent = Math.max(0, Math.min(1, current / max));
   const filled = Math.round(percent * length);
@@ -392,12 +393,46 @@ function createHPBar(current, max, length = 10) {
   return '█'.repeat(filled) + '░'.repeat(empty);
 }
 
+// 비율 바 생성 (0~100%)
+function createRateBar(rate, length = 10) {
+  const filled = Math.round((rate / 100) * length);
+  const empty = length - filled;
+  return '█'.repeat(filled) + '░'.repeat(empty);
+}
+
+// 장비 슬롯 아이콘
+function getSlotIcon(slot) {
+  const icons = {
+    weapon: '⚔️',
+    armor: '🛡️',
+    accessory: '💍',
+    relic: '🔮'
+  };
+  return icons[slot] || '📦';
+}
+
+// 패턴 유형 아이콘
+function getPatternIcon(type) {
+  const icons = {
+    crush: '💀',    // 분쇄 - 방어 필수
+    pierce: '🔺',   // 관통 - 회피 필수
+    stagger: '💫',  // 빈틈 - 공격 찬스
+    normal: '⚡'
+  };
+  return icons[type] || '⚡';
+}
+
 // ============================================
 // Export
 // ============================================
 
 module.exports = {
+  // UI 유틸
   createHPBar,
+  createRateBar,
+  getSlotIcon,
+  getPatternIcon,
+  // 텍스트 생성
   getTownText,
   getEtherMenu,
   getHelpText,

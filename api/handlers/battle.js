@@ -58,6 +58,18 @@ function getRequiredKills(floor) {
 }
 
 /**
+ * 층 진행도 바
+ * @param {number} current - 현재 처치 수
+ * @param {number} max - 필요 처치 수
+ * @returns {string} 진행도 바
+ */
+function getProgressBar(current, max) {
+  const filled = Math.floor((current / max) * 5);
+  const empty = 5 - filled;
+  return '█'.repeat(filled) + '░'.repeat(empty);
+}
+
+/**
  * 몬스터 HP 구간별 반응 텍스트
  */
 function getMonsterReaction(enemy) {
@@ -223,7 +235,32 @@ async function handleVictory(user, enemy, res, combatLog, saveUser, userId) {
   } else {
     text += `🎁 드랍: 없음\n`;
   }
-  
+
+  // 층 진행도 표시 (일반 몬스터 전투 시)
+  let buttons = ['전투', '마을'];
+  if (!enemy.isBoss) {
+    const floor = user.floor || 1;
+    const floorKills = user.floorKills || 0;
+    const required = getRequiredKills(floor);
+
+    text += `\n━━━━━━━━━━━━━━━━━━\n`;
+
+    if (user.bossAvailable) {
+      // 보스 출현
+      text += `⚠️ ${floor}층 보스 출현!\n`;
+      text += `🔥 보스에게 도전할 수 있습니다!`;
+      buttons = ['🔥 보스 도전', '전투', '마을'];
+    } else {
+      // 보스 미출현
+      const progressBar = getProgressBar(floorKills, required);
+      const remaining = required - floorKills;
+      text += `📍 ${floor}층 진행: ${progressBar} ${floorKills}/${required}\n`;
+      text += `💡 ${remaining}마리 더 처치하면 보스 출현!`;
+    }
+
+    text += `\n━━━━━━━━━━━━━━━━━━`;
+  }
+
   // 상태 초기화
   user.phase = 'town';
   user.monster = null;
@@ -233,10 +270,10 @@ async function handleVictory(user, enemy, res, combatLog, saveUser, userId) {
   user.hunterStacks = 0;
   user.usedSurvival = false;
   user.potionsUsedInBattle = 0;
-  
+
   await saveUser(userId, user);
-  
-  return res.json(reply(text, ['전투', '마을']));
+
+  return res.json(reply(text, buttons));
 }
 
 /**

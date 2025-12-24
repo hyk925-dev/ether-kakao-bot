@@ -10,7 +10,7 @@ const { getMonsterImage } = require('../../data/images');
 const { generateItem, getItemDisplay } = require('../../systems/items');
 const { reply, replyWithImage } = require('../../utils/response');
 const { calcStats, getReqExp } = require('../../utils/calc');
-const { createHPBar } = require('../../utils/text');
+const { createHPBar, getPatternIcon } = require('../../utils/text');
 const {
   spawnMonster,
   checkBossPhase,
@@ -82,6 +82,30 @@ function getMonsterReaction(enemy) {
 }
 
 /**
+ * 선택지 버튼에 아이콘 추가
+ */
+function getChoiceWithIcon(choice) {
+  const icons = {
+    '회피': '💨 회피',
+    '방어': '🛡️ 방어',
+    '역습': '⚔️ 역습'
+  };
+  return icons[choice] || choice;
+}
+
+/**
+ * 버튼 배열에 아이콘 적용
+ */
+function applyButtonIcons(buttons) {
+  return buttons.map(btn => {
+    if (btn === '회피' || btn === '방어' || btn === '역습') {
+      return getChoiceWithIcon(btn);
+    }
+    return btn;
+  });
+}
+
+/**
  * 패배 메시지 생성
  */
 function getDefeatMessage(goldLoss = 0, isBoss = false, floor = 1) {
@@ -106,9 +130,9 @@ function getDefeatMessage(goldLoss = 0, isBoss = false, floor = 1) {
 }
 
 /**
- * 전투 시작 UI 생성 (v4.0 완성판)
+ * 전투 시작 UI 생성 (v4.1 개선)
  */
-function getBattleStartUI(user, enemy, telegraph, choices, understandingLevel) {
+function getBattleStartUI(user, enemy, telegraph, choices, understandingLevel, pattern) {
   const c = calcStats(user);
 
   // 이해도 퍼센트 계산
@@ -116,29 +140,41 @@ function getBattleStartUI(user, enemy, telegraph, choices, understandingLevel) {
   const understandingExp = understanding?.exp || 0;
 
   // HP 바 생성
-  const playerHpBar = createHPBar(user.hp, c.maxHp, 5);
+  const playerHpBar = createHPBar(user.hp, c.maxHp, 10);
+  const enemyHpBar = createHPBar(enemy.hp, enemy.maxHp, 8);
+  const enemyHpPercent = Math.floor((enemy.hp / enemy.maxHp) * 100);
 
-  let text = `━━━━━━━━━━━━━━━━\n`;
-  text += `⚔️ 전투 발생!\n`;
-  text += `━━━━━━━━━━━━━━━━\n\n`;
+  // 패턴 아이콘
+  const patternIcon = pattern ? getPatternIcon(pattern.type) : '⚡';
 
-  text += `👾 ${enemy.name} 출현!\n`;
-  text += `💀 HP: ${enemy.hp} | 📖 이해도: ${understandingExp}%\n`;
+  let text = `┌─────────────────┐\n`;
+  text += `│ 👹 ${enemy.name}\n`;
+  text += `│ HP [${enemyHpBar}] ${enemyHpPercent}%\n`;
+  text += `│ 📖 이해도: ${understandingExp}%\n`;
+  text += `└─────────────────┘\n`;
 
   // 몬스터 설명 (있으면 표시)
   if (enemy.desc) {
-    text += `\n"${enemy.desc}"\n`;
+    text += `"${enemy.desc}"\n\n`;
   }
 
-  text += `\n━━━━━━━━━━━━━━━━\n`;
-  text += `👤 나: [${playerHpBar}] ${user.hp}/${c.maxHp}\n`;
-  text += `━━━━━━━━━━━━━━━━\n\n`;
+  text += `⚔️ 나 [${playerHpBar}] ${user.hp}/${c.maxHp}\n`;
 
-  text += `📖 전조\n"${telegraph}"`;
+  // 광기 표시
+  if ((user.madness || 0) > 0) {
+    text += `🌀 광기: ${user.madness}`;
+    if (user.madness >= 80) text += ' ⚠️위험!';
+    else if (user.madness >= 50) text += ' 🔥';
+    text += '\n';
+  }
+
+  text += `\n━━━ ${patternIcon} 전조 ━━━\n`;
+  text += `"${telegraph}"\n`;
 
   // ??? 제외하고 버튼 생성
   const validChoices = choices.filter(c => c !== '???');
-  const buttons = [...validChoices, '스킬', '물약', '도망'].slice(0, 6);
+  const rawButtons = [...validChoices, '스킬', '물약', '도망'].slice(0, 6);
+  const buttons = applyButtonIcons(rawButtons);
 
   return { text, buttons };
 }
@@ -525,11 +561,18 @@ async function processBattleTurn(user, enemy, interpretResult, context, res, sav
   const nextPattern = selectPattern(enemy);
   const nextTelegraph = getTelegraph(nextPattern, user.understandingLevel);
   const nextChoices = getChoices(nextPattern, user.understandingLevel);
+  const nextPatternIcon = getPatternIcon(nextPattern.type);
 
   user.currentPattern = nextPattern;
   user.battleTurn = (user.battleTurn || 1) + 1;
 
-  text += `📖 다음 전조\n${nextTelegraph}`;
+  text += `${nextPatternIcon} 다음 전조\n"${nextTelegraph}"`;
+
+  // 광기 표시 (전투 중)
+  if ((user.madness || 0) > 0) {
+    text += `\n🌀 광기: ${user.madness}`;
+    if (user.madness >= 80) text += ' ⚠️';
+  }
 
   // 연속 성공 표시
   const streak = user.interpretStreak || 0;
@@ -537,12 +580,13 @@ async function processBattleTurn(user, enemy, interpretResult, context, res, sav
     const streakBonus = getStreakBonus(streak);
     text += `\n🔥 ${streak}연속! 공격 +${streakBonus}%`;
   }
-  
+
   await saveUser(userId, user);
-  
+
   const validChoices = nextChoices.filter(c => c !== '???');
-  const buttons = [...validChoices, '스킬', '물약', '도망'].slice(0, 6);
-  
+  const rawButtons = [...validChoices, '스킬', '물약', '도망'].slice(0, 6);
+  const buttons = applyButtonIcons(rawButtons);
+
   return res.json(reply(text, buttons));
 }
 
@@ -588,7 +632,7 @@ module.exports = async function battleHandler(ctx) {
     await saveUser(userId, u);
 
     // 화면 출력
-    const ui = getBattleStartUI(u, monster, telegraph, choices, understandingLevel);
+    const ui = getBattleStartUI(u, monster, telegraph, choices, understandingLevel, pattern);
     const monsterImg = getMonsterImage(monster.name);
     
     if (monsterImg) {

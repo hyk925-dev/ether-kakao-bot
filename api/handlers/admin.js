@@ -74,26 +74,23 @@ async function handleMyId(userId, res) {
 // @유저정보 [이름]
 // ============================================
 
-async function handleUserInfo(userName, res) {
-  const user = await getUserByName(userName);
-  
-  if (!user) {
-    return res.json(reply(`유저 "${userName}"을 찾을 수 없습니다.`, ['마을']));
-  }
-  
+/**
+ * 유저 정보 포맷
+ */
+function formatUserInfo(user) {
   // 플레이타임 계산
   const playtime = user.totalPlaytime || 0;
   const hours = Math.floor(playtime / 60);
   const mins = Math.floor(playtime % 60);
-  
+
   // 마지막 접속
   const lastLogin = user.lastLogin ? getTimeAgo(user.lastLogin) : '알 수 없음';
-  
+
   // 승률 계산
   const totalBattles = user.totalBattles || 0;
   const deaths = user.totalDeaths || 0;
   const winRate = totalBattles > 0 ? Math.floor(((totalBattles - deaths) / totalBattles) * 100) : 0;
-  
+
   let text = `━━━━━━━━━━━━━━━━━━\n`;
   text += `【 ${user.name} 】\n`;
   text += `━━━━━━━━━━━━━━━━━━\n`;
@@ -112,8 +109,8 @@ async function handleUserInfo(userName, res) {
   text += `연속 접속: ${user.loginStreak || 0}일\n`;
   text += `마지막 접속: ${lastLogin}\n`;
   text += `생성일: ${formatDate(user.createdAt)}`;
-  
-  return res.json(reply(text, ['@전체통계', '마을']));
+
+  return text;
 }
 
 // ============================================
@@ -300,96 +297,194 @@ async function handleDetailedRanking(res) {
   }
 }
 
-// ============================================
-// @베타보상
-// ============================================
-
-async function handleBetaReward(userName, ctx) {
-  const { res, saveUser } = ctx;
-  const user = await getUserByName(userName);
-
-  if (!user) {
-    return res.json(reply(`유저 "${userName}"을 찾을 수 없습니다.`, ['마을']));
-  }
-
-  // 이미 받았는지 체크
-  if (user.betaRewardClaimed) {
-    return res.json(reply(`${userName}님은 이미 베타 보상을 받았습니다.`, ['마을']));
-  }
-
-  // 보상 지급
-  const goldReward = 5000;
-  const potionReward = 10;
-
-  user.gold = (user.gold || 0) + goldReward;
-  user.potions = (user.potions || 0) + potionReward;
-  user.totalGoldEarned = (user.totalGoldEarned || 0) + goldReward;
-  user.betaRewardClaimed = true;
-
-  // docId로 저장 (getUserByName이 docId 포함해서 반환)
-  if (user.docId) {
-    await saveUser(user.docId, user);
-  }
-
-  let text = `━━━━━━━━━━━━━━━━\n`;
-  text += `🎁 베타 보상 지급\n`;
-  text += `━━━━━━━━━━━━━━━━\n`;
-  text += `대상: ${userName}\n\n`;
-  text += `✅ 골드 +${goldReward.toLocaleString()}G\n`;
-  text += `✅ 하급물약 +${potionReward}개\n\n`;
-  text += `지급 완료!`;
-
-  return res.json(reply(text, ['@전체통계', '마을']));
-}
 
 // ============================================
 // 메인 핸들러
 // ============================================
 
 async function adminHandler(ctx) {
-  const { userId, msg, res } = ctx;
-  
+  const { userId, msg, res, u, saveUser } = ctx;
+
   // 운영자 권한 체크
   if (!isAdmin(userId)) {
     return null; // 일반 유저는 통과
   }
-  
+
   // @내아이디
   if (msg === '@내아이디') {
     return handleMyId(userId, res);
   }
-  
-  // @유저정보 [이름]
-  if (msg.startsWith('@유저정보 ')) {
-    const userName = msg.replace('@유저정보 ', '').trim();
-    if (!userName) {
-      return res.json(reply('사용법: @유저정보 [이름]', ['마을']));
+
+  // ========================================
+  // @유저정보 [이름] — 이름 없으면 자기 정보
+  // ========================================
+  if (msg === '@유저정보' || msg.startsWith('@유저정보 ')) {
+    const targetName = msg.replace('@유저정보', '').trim();
+
+    // 이름 없으면 자기 정보
+    if (!targetName) {
+      if (!u) {
+        return res.json(reply('❌ 캐릭터가 없습니다.', ['시작']));
+      }
+      return res.json(reply(formatUserInfo(u), ['@전체통계', '마을']));
     }
-    return handleUserInfo(userName, res);
+
+    // 이름 있으면 해당 유저 검색
+    const target = await getUserByName(targetName);
+    if (!target) {
+      return res.json(reply(`❌ "${targetName}" 유저를 찾을 수 없습니다.`, ['마을']));
+    }
+    return res.json(reply(formatUserInfo(target), ['@전체통계', '마을']));
   }
-  
+
   // @전체통계
   if (msg === '@전체통계') {
     return handleServerStats(res);
   }
-  
+
   // @접속현황
   if (msg === '@접속현황') {
     return handleOnlineStatus(res);
   }
-  
+
   // @랭킹상세
   if (msg === '@랭킹상세') {
     return handleDetailedRanking(res);
   }
 
-  // @베타보상 [이름]
-  if (msg.startsWith('@베타보상 ')) {
-    const userName = msg.replace('@베타보상 ', '').trim();
-    if (!userName) {
-      return res.json(reply('사용법: @베타보상 [이름]', ['마을']));
+  // ========================================
+  // @베타보상 [이름] — 이름 없으면 자기에게
+  // ========================================
+  if (msg === '@베타보상' || msg.startsWith('@베타보상 ')) {
+    const targetName = msg.replace('@베타보상', '').trim();
+
+    let target, targetId;
+
+    if (!targetName) {
+      // 자기에게
+      if (!u) {
+        return res.json(reply('❌ 캐릭터가 없습니다.', ['시작']));
+      }
+      target = u;
+      targetId = userId;
+    } else {
+      // 해당 유저 검색
+      const found = await getUserByName(targetName);
+      if (!found) {
+        return res.json(reply(`❌ "${targetName}" 유저를 찾을 수 없습니다.`, ['마을']));
+      }
+      target = found;
+      targetId = found.docId;
     }
-    return handleBetaReward(userName, ctx);
+
+    // 이미 받았는지 체크
+    if (target.betaRewardClaimed) {
+      return res.json(reply(`${target.name}님은 이미 베타 보상을 받았습니다.`, ['마을']));
+    }
+
+    // 보상 지급
+    target.gold = (target.gold || 0) + 5000;
+    target.potions = (target.potions || 0) + 10;
+    target.betaRewardClaimed = true;
+    await saveUser(targetId, target);
+
+    return res.json(reply(
+      `✅ 베타 보상 지급 완료!\n` +
+      `대상: ${target.name}\n` +
+      `💰 +5,000G\n` +
+      `🧪 +10 물약`,
+      ['마을']
+    ));
+  }
+
+  // ========================================
+  // @골드 [이름] [수량]
+  // ========================================
+  if (msg.startsWith('@골드 ')) {
+    const parts = msg.replace('@골드 ', '').split(' ');
+    const targetName = parts[0];
+    const amount = parseInt(parts[1]) || 0;
+
+    if (!targetName || amount === 0) {
+      return res.json(reply('사용법: @골드 [이름] [수량]\n예: @골드 윤기 1000', ['마을']));
+    }
+
+    const found = await getUserByName(targetName);
+    if (!found) {
+      return res.json(reply(`❌ "${targetName}" 유저를 찾을 수 없습니다.`, ['마을']));
+    }
+
+    found.gold = (found.gold || 0) + amount;
+    await saveUser(found.docId, found);
+
+    const sign = amount > 0 ? '+' : '';
+    return res.json(reply(
+      `✅ 골드 지급 완료!\n` +
+      `대상: ${found.name}\n` +
+      `💰 ${sign}${amount.toLocaleString()}G (현재: ${found.gold.toLocaleString()}G)`,
+      ['마을']
+    ));
+  }
+
+  // ========================================
+  // @레벨 [이름] [레벨]
+  // ========================================
+  if (msg.startsWith('@레벨 ')) {
+    const parts = msg.replace('@레벨 ', '').split(' ');
+    const targetName = parts[0];
+    const level = parseInt(parts[1]) || 1;
+
+    if (!targetName) {
+      return res.json(reply('사용법: @레벨 [이름] [레벨]\n예: @레벨 윤기 10', ['마을']));
+    }
+
+    const found = await getUserByName(targetName);
+    if (!found) {
+      return res.json(reply(`❌ "${targetName}" 유저를 찾을 수 없습니다.`, ['마을']));
+    }
+
+    const oldLevel = found.lv || 1;
+    found.lv = level;
+    await saveUser(found.docId, found);
+
+    return res.json(reply(
+      `✅ 레벨 변경 완료!\n` +
+      `대상: ${found.name}\n` +
+      `📊 Lv.${oldLevel} → Lv.${level}`,
+      ['마을']
+    ));
+  }
+
+  // ========================================
+  // @층 [이름] [층]
+  // ========================================
+  if (msg.startsWith('@층 ')) {
+    const parts = msg.replace('@층 ', '').split(' ');
+    const targetName = parts[0];
+    const floor = parseInt(parts[1]) || 1;
+
+    if (!targetName) {
+      return res.json(reply('사용법: @층 [이름] [층]\n예: @층 윤기 10', ['마을']));
+    }
+
+    const found = await getUserByName(targetName);
+    if (!found) {
+      return res.json(reply(`❌ "${targetName}" 유저를 찾을 수 없습니다.`, ['마을']));
+    }
+
+    const oldFloor = found.floor || 1;
+    found.floor = floor;
+    found.maxFloor = Math.max(found.maxFloor || 1, floor);
+    found.floorKills = 0;
+    found.bossAvailable = false;
+    await saveUser(found.docId, found);
+
+    return res.json(reply(
+      `✅ 층수 변경 완료!\n` +
+      `대상: ${found.name}\n` +
+      `📍 ${oldFloor}층 → ${floor}층`,
+      ['마을']
+    ));
   }
 
   return null; // 매칭 안 되면 다음 핸들러로

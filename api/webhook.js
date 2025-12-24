@@ -198,6 +198,13 @@ app.post('/api/webhook', async (req, res) => {
       if (msg === '전투' || msg === '광기전투') {
         return await battleHandler(ctx);
       }
+
+      // ----------------------------------------
+      // 6-2-1. 보스 도전 (battleHandler)
+      // ----------------------------------------
+      if (msg === '보스 도전' || msg === '🔥 보스 도전' || msg === '보스도전' || msg === '보스') {
+        return await battleHandler(ctx);
+      }
       
       // ----------------------------------------
       // 6-3. 장비 (equipmentHandler)

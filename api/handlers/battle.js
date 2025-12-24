@@ -5,6 +5,7 @@
 
 const { JOBS } = require('../../data');
 const { BOSSES } = require('../../data/bosses');
+const { getBoss, getBossPattern } = require('../../bosses');
 const { getMonsterImage } = require('../../data/images');
 const { generateItem, getItemDisplay } = require('../../systems/items');
 const { reply, replyWithImage } = require('../../utils/response');
@@ -83,15 +84,24 @@ function getMonsterReaction(enemy) {
 /**
  * 패배 메시지 생성
  */
-function getDefeatMessage(goldLoss = 0) {
+function getDefeatMessage(goldLoss = 0, isBoss = false, floor = 1) {
   let text = `━━━━━━━━━━━━━━━━\n`;
   text += `💀 패배...\n`;
   text += `━━━━━━━━━━━━━━━━\n\n`;
   text += `어둠 속으로 의식이 사라진다...\n\n`;
-  if (goldLoss > 0) {
-    text += `💸 -${goldLoss}G (약탈당함)\n`;
+
+  if (isBoss) {
+    // 보스 패배 - 골드 손실 없음, 재도전 가능
+    text += `📍 ${floor}층 보스 도전 가능\n`;
+    text += `💡 마을에서 회복 후 재도전하세요.`;
+  } else {
+    // 일반 몬스터 패배
+    if (goldLoss > 0) {
+      text += `💸 -${goldLoss}G (약탈당함)\n`;
+    }
+    text += `📍 마을로 귀환`;
   }
-  text += `📍 마을로 귀환`;
+
   return text;
 }
 
@@ -188,16 +198,22 @@ async function handleVictory(user, enemy, res, combatLog, saveUser, userId) {
   let drop = null;
   let guaranteeRare = false;
 
-  // 보스 첫 킬 확인
+  // 보스 승리 처리
   if (enemy.isBoss) {
     const bossId = enemy.id || enemy.name;
     if (!user.bossKills || !user.bossKills[bossId]) {
       guaranteeRare = true;
     }
-    
+
     if (!user.bossKills) user.bossKills = {};
     user.bossKills[bossId] = true;
     user.totalBossKills = (user.totalBossKills || 0) + 1;
+
+    // 층 클리어 처리
+    const currentFloor = user.floor || 1;
+    user.bossAvailable = false;
+    user.floorKills = 0;
+    user.maxFloor = Math.max(user.maxFloor || currentFloor, currentFloor + 1);
   }
   
   // 아이템 생성
@@ -236,9 +252,22 @@ async function handleVictory(user, enemy, res, combatLog, saveUser, userId) {
     text += `🎁 드랍: 없음\n`;
   }
 
-  // 층 진행도 표시 (일반 몬스터 전투 시)
+  // 결과 분기 (보스 vs 일반 몬스터)
   let buttons = ['전투', '마을'];
-  if (!enemy.isBoss) {
+
+  if (enemy.isBoss) {
+    // 보스 승리 메시지
+    const clearedFloor = user.floor || 1;
+    const nextFloor = clearedFloor + 1;
+
+    text += `\n━━━━━━━━━━━━━━━━━━\n`;
+    text += `🏆 ${clearedFloor}층 클리어!\n`;
+    text += `🔓 ${nextFloor}층 해금됨`;
+    text += `\n━━━━━━━━━━━━━━━━━━`;
+
+    buttons = [`${nextFloor}층으로`, `${clearedFloor}층 파밍`, '마을'];
+  } else {
+    // 일반 몬스터 - 층 진행도 표시
     const floor = user.floor || 1;
     const floorKills = user.floorKills || 0;
     const required = getRequiredKills(floor);
@@ -381,8 +410,8 @@ async function processBattleTurn(user, enemy, interpretResult, context, res, sav
         effectsText.push(`🛡️ 불굴! HP 1로 생존`);
       } else {
         incrementTurn(user);
-        // 골드 손실 (10% 약탈)
-        const goldLoss = Math.floor(user.gold * 0.1);
+        // 보스 패배 시 골드 손실 없음, 일반 몬스터만 10% 약탈
+        const goldLoss = enemy.isBoss ? 0 : Math.floor(user.gold * 0.1);
         user.gold -= goldLoss;
         user.phase = 'town';
         user.hp = Math.floor(c.maxHp * 0.3);
@@ -393,7 +422,7 @@ async function processBattleTurn(user, enemy, interpretResult, context, res, sav
         user.potionsUsedInBattle = 0;
         recordBattleDeath(user, enemy);
         await saveUser(userId, user);
-        return res.json(reply(getDefeatMessage(goldLoss), ['마을']));
+        return res.json(reply(getDefeatMessage(goldLoss, enemy.isBoss, user.floor || 1), ['마을']));
       }
     }
 
@@ -433,8 +462,8 @@ async function processBattleTurn(user, enemy, interpretResult, context, res, sav
   if (user.hp <= 0) {
     if (!checkSurvival(user)) {
       incrementTurn(user);
-      // 골드 손실 (10% 약탈)
-      const goldLoss = Math.floor(user.gold * 0.1);
+      // 보스 패배 시 골드 손실 없음, 일반 몬스터만 10% 약탈
+      const goldLoss = enemy.isBoss ? 0 : Math.floor(user.gold * 0.1);
       user.gold -= goldLoss;
       user.phase = 'town';
       user.hp = Math.floor(c.maxHp * 0.3);
@@ -445,7 +474,7 @@ async function processBattleTurn(user, enemy, interpretResult, context, res, sav
       user.potionsUsedInBattle = 0;
       recordBattleDeath(user, enemy);
       await saveUser(userId, user);
-      return res.json(reply(getDefeatMessage(goldLoss), ['마을']));
+      return res.json(reply(getDefeatMessage(goldLoss, enemy.isBoss, user.floor || 1), ['마을']));
     }
   }
 
@@ -567,7 +596,71 @@ module.exports = async function battleHandler(ctx) {
     }
     return res.json(reply(ui.text, ui.buttons));
   }
-  
+
+  // ========================================
+  // 보스 도전 (마을에서)
+  // ========================================
+  if (u.phase === 'town' && (msg === '보스 도전' || msg === '🔥 보스 도전' || msg === '보스도전' || msg === '보스')) {
+    // 보스 출현 조건 체크
+    if (!u.bossAvailable) {
+      return res.json(reply('아직 보스가 출현하지 않았습니다.\n몬스터를 더 처치해주세요.', ['전투', '마을']));
+    }
+
+    // 보스 데이터 가져오기
+    const boss = getBoss(u.floor || 1);
+    if (!boss) {
+      return res.json(reply('이 층에는 보스가 없습니다.', ['전투', '마을']));
+    }
+
+    // 보스 객체 생성 (isBoss 플래그 추가)
+    const bossMonster = {
+      ...boss,
+      hp: boss.hp,
+      maxHp: boss.hp,
+      isBoss: true
+    };
+
+    // 전투 통계 기록 시작
+    recordBattleStart(u, bossMonster);
+
+    // 이해도 레벨 확인
+    const understandingLevel = getBattleUnderstandingLevel(u, bossMonster);
+
+    // 패턴 선택
+    const pattern = selectPattern(bossMonster);
+
+    // 텔레그래프 생성
+    const telegraph = getTelegraph(pattern, understandingLevel);
+    const choices = getChoices(pattern, understandingLevel);
+
+    // 전투 상태 저장
+    u.phase = 'battle';
+    u.monster = bossMonster;
+    u.currentPattern = pattern;
+    u.understandingLevel = understandingLevel;
+    u.battleTurn = 1;
+    u.interpretStreak = 0;
+    u.hunterStacks = 0;
+    u.usedSurvival = false;
+    u.potionsUsedInBattle = 0;
+
+    await saveUser(userId, u);
+
+    // 보스 전투 시작 메시지
+    let text = `━━━━━━━━━━━━━━━━━━\n`;
+    text += `🔥 ${boss.emoji} ${boss.name}\n`;
+    text += `${boss.description}\n\n`;
+    text += `HP: ${boss.hp}\n`;
+    text += `━━━━━━━━━━━━━━━━━━\n\n`;
+    text += `⚔️ 보스전 시작!\n\n`;
+    text += `📖 전조\n"${telegraph}"`;
+
+    const validChoices = choices.filter(c => c !== '???');
+    const buttons = [...validChoices, '스킬', '물약', '도망'].slice(0, 6);
+
+    return res.json(reply(text, buttons));
+  }
+
   // ========================================
   // 전투 중
   // ========================================
@@ -664,8 +757,8 @@ module.exports = async function battleHandler(ctx) {
     if (u.hp <= 0) {
       if (!checkSurvival(u)) {
         incrementTurn(u);
-        // 골드 손실 (10% 약탈)
-        const goldLoss = Math.floor(u.gold * 0.1);
+        // 보스 패배 시 골드 손실 없음, 일반 몬스터만 10% 약탈
+        const goldLoss = m.isBoss ? 0 : Math.floor(u.gold * 0.1);
         u.gold -= goldLoss;
         u.phase = 'town';
         u.hp = Math.floor(c.maxHp * 0.3);
@@ -676,7 +769,7 @@ module.exports = async function battleHandler(ctx) {
         u.potionsUsedInBattle = 0;
         recordBattleDeath(u, m);
         await saveUser(userId, u);
-        return res.json(reply(getDefeatMessage(goldLoss), ['마을']));
+        return res.json(reply(getDefeatMessage(goldLoss, m.isBoss, u.floor || 1), ['마을']));
       } else {
         u.hp = 1;
         skillText += `🛡️ 불굴! HP 1로 생존\n`;

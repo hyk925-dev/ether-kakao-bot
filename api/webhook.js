@@ -284,10 +284,7 @@ app.post('/api/webhook', async (req, res) => {
         /^판매\d+$/,                  // 판매1
         /^인벤\d+$/,                  // 인벤1
         /^상세/,                      // 상세
-        /^강화weapon$/,               // 강화weapon
-        /^강화armor$/,                // 강화armor
-        /^강화accessory$/,            // 강화accessory
-        /^강화relic$/                 // 강화relic
+        /^(무기|방어구|악세|유물)강화$/  // 무기강화, 방어구강화, 악세강화, 유물강화
       ];
       
       if (equipCommands.includes(msg) || equipPatterns.some(p => p.test(msg))) {

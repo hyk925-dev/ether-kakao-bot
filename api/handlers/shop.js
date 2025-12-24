@@ -18,35 +18,41 @@ module.exports = async function shopHandler(ctx) {
   // 상점 메뉴
   // ========================================
   if (msg === '상점') {
-    let shopText = `🏪 상점 | 💰 ${u.gold || 0}G\n━━━━━━━━━━━━━━━\n\n`;
-    shopText += `🧪 하급 물약 - ${basicPrice}G (HP 30%) [보유: ${u.potions || 0}]\n`;
-    
-    const buttons = ['하급'];
-    
+    let shopText = `━━━━━━━━━━━━━━━━\n`;
+    shopText += `🏪 상점\n`;
+    shopText += `━━━━━━━━━━━━━━━━\n`;
+    shopText += `💰 소지금: ${(u.gold || 0).toLocaleString()}G\n\n`;
+    shopText += `【 물약 】\n`;
+    shopText += `🧪 하급물약 (HP 30%) — ${basicPrice}G\n`;
+
+    const buttons = ['하급물약'];
+
     if (floor >= 11) {
-      shopText += `🧪 중급 물약 - ${mediumPrice}G (HP 50%) [보유: ${u.mediumPotions || 0}]\n`;
-      buttons.push('중급');
+      shopText += `🧪 중급물약 (HP 50%) — ${mediumPrice}G\n`;
+      buttons.push('중급물약');
     }
-    
+
     if (floor >= 31) {
-      shopText += `💊 고급 물약 - ${highPrice}G (HP 100%) [보유: ${u.hiPotions || 0}]\n`;
-      buttons.push('고급');
+      shopText += `🧪 고급물약 (HP 100%) — ${highPrice}G\n`;
+      buttons.push('고급물약');
     }
-    
+
     if (floor >= 6) {
-      shopText += `\n💊 진정제 - ${SEDATIVE.price}G (광기 -30)`;
-      buttons.push('진정제구매');
+      shopText += `💊 진정제 (광기 -30) — ${SEDATIVE.price}G\n`;
+      buttons.push('진정제');
     }
-    
+
+    shopText += `\n💡 버튼 또는 "물약+5" 입력`;
+
     buttons.push('마을');
-    
+
     return res.json(reply(shopText, buttons));
   }
   
   // ========================================
   // 하급 물약 구매
   // ========================================
-  if (msg === '하급' || msg === '물약구매') {
+  if (msg === '하급' || msg === '하급물약' || msg === '물약구매') {
     const cost = basicPrice;
     
     if ((u.gold || 0) < cost) {
@@ -88,7 +94,7 @@ module.exports = async function shopHandler(ctx) {
   // ========================================
   // 중급 물약 구매
   // ========================================
-  if (msg === '중급' || msg === '중급물약구매') {
+  if (msg === '중급' || msg === '중급물약' || msg === '중급물약구매') {
     if (floor < 11) {
       return res.json(reply('11층부터 구매 가능합니다.', ['상점', '마을']));
     }
@@ -138,7 +144,7 @@ module.exports = async function shopHandler(ctx) {
   // ========================================
   // 고급 물약 구매
   // ========================================
-  if (msg === '고급' || msg === '고급물약구매') {
+  if (msg === '고급' || msg === '고급물약' || msg === '고급물약구매') {
     if (floor < 31) {
       return res.json(reply('31층부터 구매 가능합니다.', ['상점', '마을']));
     }

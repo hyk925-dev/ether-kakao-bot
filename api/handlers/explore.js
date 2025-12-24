@@ -19,10 +19,25 @@ module.exports = async function exploreHandler(ctx) {
   // 탐사 메뉴
   // ========================================
   if (msg === '탐사') {
-    return res.json(reply(
-      getExploreText(u),
-      ['안전탐사', '위험탐사', '금기탐사', '마을']
-    ));
+    const safe = EXPLORE_CONFIG.safe;
+    const danger = EXPLORE_CONFIG.danger;
+    const forbidden = EXPLORE_CONFIG.forbidden;
+
+    let text = `━━━━━━━━━━━━━━━━\n`;
+    text += `🧭 탐사\n`;
+    text += `━━━━━━━━━━━━━━━━\n`;
+    text += `💰 소지금: ${(u.gold || 0).toLocaleString()}G\n\n`;
+    text += `【 탐사 종류 】\n`;
+    text += `🟢 안전탐사 — ${safe.cost}G\n`;
+    text += `   낮은 위험, 기본 보상\n\n`;
+    text += `🟡 위험탐사 — ${danger.cost}G\n`;
+    text += `   중간 위험, 좋은 보상\n\n`;
+    text += `🔴 금기탐사 — ${forbidden.cost}G\n`;
+    text += `   높은 위험, 희귀 보상\n`;
+    text += `   ⚠️ 광기 +20\n\n`;
+    text += `💡 탐사 시 랜덤 이벤트 발생`;
+
+    return res.json(reply(text, ['안전탐사', '위험탐사', '금기탐사', '마을']));
   }
   
   // ========================================

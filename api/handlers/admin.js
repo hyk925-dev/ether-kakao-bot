@@ -301,6 +301,48 @@ async function handleDetailedRanking(res) {
 }
 
 // ============================================
+// @베타보상
+// ============================================
+
+async function handleBetaReward(userName, ctx) {
+  const { res, saveUser } = ctx;
+  const user = await getUserByName(userName);
+
+  if (!user) {
+    return res.json(reply(`유저 "${userName}"을 찾을 수 없습니다.`, ['마을']));
+  }
+
+  // 이미 받았는지 체크
+  if (user.betaRewardClaimed) {
+    return res.json(reply(`${userName}님은 이미 베타 보상을 받았습니다.`, ['마을']));
+  }
+
+  // 보상 지급
+  const goldReward = 5000;
+  const potionReward = 10;
+
+  user.gold = (user.gold || 0) + goldReward;
+  user.potions = (user.potions || 0) + potionReward;
+  user.totalGoldEarned = (user.totalGoldEarned || 0) + goldReward;
+  user.betaRewardClaimed = true;
+
+  // docId로 저장 (getUserByName이 docId 포함해서 반환)
+  if (user.docId) {
+    await saveUser(user.docId, user);
+  }
+
+  let text = `━━━━━━━━━━━━━━━━\n`;
+  text += `🎁 베타 보상 지급\n`;
+  text += `━━━━━━━━━━━━━━━━\n`;
+  text += `대상: ${userName}\n\n`;
+  text += `✅ 골드 +${goldReward.toLocaleString()}G\n`;
+  text += `✅ 하급물약 +${potionReward}개\n\n`;
+  text += `지급 완료!`;
+
+  return res.json(reply(text, ['@전체통계', '마을']));
+}
+
+// ============================================
 // 메인 핸들러
 // ============================================
 
@@ -340,7 +382,16 @@ async function adminHandler(ctx) {
   if (msg === '@랭킹상세') {
     return handleDetailedRanking(res);
   }
-  
+
+  // @베타보상 [이름]
+  if (msg.startsWith('@베타보상 ')) {
+    const userName = msg.replace('@베타보상 ', '').trim();
+    if (!userName) {
+      return res.json(reply('사용법: @베타보상 [이름]', ['마을']));
+    }
+    return handleBetaReward(userName, ctx);
+  }
+
   return null; // 매칭 안 되면 다음 핸들러로
 }
 

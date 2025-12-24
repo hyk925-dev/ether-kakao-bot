@@ -12,6 +12,28 @@ const { reply, replyWithImage } = require('../../utils/response');
 const { getTownText, createHPBar } = require('../../utils/text');
 
 // ============================================
+// 헬퍼 함수
+// ============================================
+
+/**
+ * 층별 보스 출현 필요 처치 수
+ */
+function getRequiredKills(floor) {
+  if (floor <= 10) return 5;
+  if (floor <= 30) return 7;
+  return 10;
+}
+
+/**
+ * 진행도 바
+ */
+function getProgressBar(current, max) {
+  const filled = Math.floor((current / max) * 5);
+  const empty = 5 - filled;
+  return '█'.repeat(filled) + '░'.repeat(empty);
+}
+
+// ============================================
 // Main Handler
 // ============================================
 
@@ -57,6 +79,12 @@ module.exports = async function townHandler(ctx) {
     const nc = calcStats(u);
     const hpBar = createHPBar(u.hp || 0, nc.maxHp || 1, 10);
 
+    // 층 진행도 계산
+    const floorKills = u.floorKills || 0;
+    const required = getRequiredKills(floor);
+    const progressBar = getProgressBar(floorKills, required);
+    const remaining = required - floorKills;
+
     // 새 마을 형식
     let townText = `━━━━━━━━━━━━━━━━\n`;
     townText += `🏘️ 마을\n`;
@@ -64,8 +92,25 @@ module.exports = async function townHandler(ctx) {
     townText += `👤 ${u.name} Lv.${u.lv || 1}\n`;
     townText += `❤️ [${hpBar}] ${u.hp || 0}/${nc.maxHp}\n`;
     townText += `💰 ${(u.gold || 0).toLocaleString()}G | 🌀 광기 ${u.madness || 0}\n\n`;
-    townText += `🏔️ 현재: ${floor}층\n`;
-    townText += `🎯 목표: ${goalFloor}층 보스 처치`;
+
+    // 층 진행도 표시
+    townText += `━━━━━━━━━━━━━━━━\n`;
+    townText += `📍 현재: ${floor}층\n`;
+
+    // 버튼 분기
+    let buttons;
+    if (u.bossAvailable) {
+      // 보스 출현 중
+      townText += `🔥 보스 출현 중!\n`;
+      townText += `━━━━━━━━━━━━━━━━`;
+      buttons = ['🔥 보스 도전', '전투', '장비', '상점'];
+    } else {
+      // 보스 미출현
+      townText += `📊 진행: ${progressBar} ${floorKills}/${required}\n`;
+      townText += `🎯 목표: ${floor}층 보스 처치\n`;
+      townText += `━━━━━━━━━━━━━━━━`;
+      buttons = ['전투', '장비', '상점', '더보기'];
+    }
 
     // 공지 알림
     if (u.lastSeenNotice !== NOTICE.version) {
@@ -93,9 +138,9 @@ module.exports = async function townHandler(ctx) {
 
     const jobImg = JOB_IMAGES[u.job];
     if (jobImg) {
-      return res.json(replyWithImage(jobImg, townText, ['전투', '장비', '상점', '더보기']));
+      return res.json(replyWithImage(jobImg, townText, buttons));
     }
-    return res.json(reply(townText, ['전투', '장비', '상점', '더보기']));
+    return res.json(reply(townText, buttons));
   }
   
   // ========================================

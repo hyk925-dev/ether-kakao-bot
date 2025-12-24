@@ -47,6 +47,17 @@ const {
 // ============================================
 
 /**
+ * 층별 보스 출현 필요 처치 수
+ * @param {number} floor - 현재 층
+ * @returns {number} 필요 처치 수
+ */
+function getRequiredKills(floor) {
+  if (floor <= 10) return 5;
+  if (floor <= 30) return 7;
+  return 10;
+}
+
+/**
  * 몬스터 HP 구간별 반응 텍스트
  */
 function getMonsterReaction(enemy) {
@@ -150,10 +161,21 @@ async function handleVictory(user, enemy, res, combatLog, saveUser, userId) {
   // HP 회복
   user.hp = Math.min(c.maxHp, user.hp + Math.floor(c.maxHp * 0.2));
   
+  // 일반 몬스터 처치 카운트 (보스 제외)
+  if (!enemy.isBoss) {
+    user.floorKills = (user.floorKills || 0) + 1;
+
+    // 보스 출현 조건 체크
+    const required = getRequiredKills(user.floor || 1);
+    if (user.floorKills >= required && !user.bossAvailable) {
+      user.bossAvailable = true;
+    }
+  }
+
   // 아이템 드랍
   let drop = null;
   let guaranteeRare = false;
-  
+
   // 보스 첫 킬 확인
   if (enemy.isBoss) {
     const bossId = enemy.id || enemy.name;

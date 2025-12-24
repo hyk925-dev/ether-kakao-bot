@@ -3,7 +3,7 @@
 // 장비 관리 (목록, 강화, 판매)
 // ============================================
 
-const { reply } = require('../../utils/response');
+const { reply, replyItemCard } = require('../../utils/response');
 const { getItemDisplay, getItemStatText } = require('../../systems/items');
 const { getEnhanceRate, getEnhanceCost, executeEnhance } = require('../../systems/enhance');
 
@@ -304,28 +304,40 @@ module.exports = async function equipmentHandler(ctx) {
   }
   
   // ========================================
-  // 아이템 상세 보기 (N번)
+  // 아이템 상세 보기 (N번) — itemCard 적용
   // ========================================
   if (msg.match(/^\d+번$/)) {
     const idx = parseInt(msg.replace('번', '')) - 1;
     const item = inventory[idx];
-    
+
     if (!item) {
       return res.json(reply("해당 아이템이 없습니다.", ['목록', '마을']));
     }
-    
+
     const displayName = item.nickname || item.name;
     const enhance = item.enhance > 0 ? ` +${item.enhance}` : '';
     const price = Math.floor((item.value || 50) * 0.5);
-    
-    let text = `${item.gradeColor || '⚪'} ${displayName}${enhance}\n`;
-    text += `━━━━━━━━━━━━━━━━━━\n`;
-    text += `등급: ${item.gradeName || '일반'}\n`;
-    text += `${getItemStatText(item)}\n`;
-    text += `━━━━━━━━━━━━━━━━━━\n`;
-    text += `판매가: ${price}G`;
-    
-    return res.json(reply(text, [`인벤${idx + 1}`, `판매${idx + 1}`, '목록']));
+
+    // 타이틀, 등급
+    const title = `${item.gradeColor || '⚪'} ${displayName}${enhance}`;
+    const grade = `${item.gradeName || '일반'} ${item.slotName || '장비'}`;
+
+    // 스탯 목록
+    const stats = [];
+    if (item.atk) stats.push({ label: '⚔️ 공격력', value: `+${item.atk}` });
+    if (item.def) stats.push({ label: '🛡️ 방어력', value: `+${item.def}` });
+    if (item.hp) stats.push({ label: '❤️ HP', value: `+${item.hp}` });
+    if (item.critRate) stats.push({ label: '💥 치명타', value: `+${item.critRate}%` });
+    if (item.evasion) stats.push({ label: '💨 회피', value: `+${item.evasion}%` });
+    stats.push({ label: '💰 판매가', value: `${price}G` });
+
+    // 이미지 (있으면)
+    const image = item.image || null;
+
+    // 버튼
+    const buttons = [`장착${idx + 1}`, `판매${idx + 1}`, '목록'];
+
+    return res.json(replyItemCard(title, grade, image, stats, buttons));
   }
   
   // ========================================

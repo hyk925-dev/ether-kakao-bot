@@ -1,10 +1,11 @@
 // ============================================
-// 전투 시스템 v4.1 (데미지 공식 + 직업 시너지)
+// 전투 시스템 v4.1 (데미지 공식 + 직업 시너지 + 광기)
 // ============================================
 
 const { MONSTERS, MONSTER_TYPES, GRADES } = require('../data/monsters');
 const { BOSSES } = require('../data/bosses');
 const { JOBS } = require('../data/jobs');
+const { MADNESS_SYSTEM } = require('../data/config');
 
 // ============================================
 // 몬스터 생성
@@ -655,6 +656,118 @@ function getBattleUnderstandingLevel(player, monster) {
 }
 
 // ============================================
+// 광기 시스템 (v4.1)
+// ============================================
+
+/**
+ * 광기 증가량 계산
+ */
+function calculateMadnessGain(player, monster, damageDealt, isCrit, isKill) {
+  if (!isKill) return 0;
+
+  const { calcStats } = require('../utils/calc');
+  const c = calcStats(player);
+  const config = MADNESS_SYSTEM.gain;
+  let gain = 0;
+
+  // 기본 처치 +5
+  gain += config.kill;
+
+  // 오버킬 (적 maxHp 2배 이상) +10
+  if (damageDealt >= monster.maxHp * 2) {
+    gain += config.overkill;
+  }
+
+  // 크리티컬 처치 +8
+  if (isCrit) {
+    gain += config.critKill;
+  }
+
+  // 이단자 폭주 (HP 20% 이하) 2배
+  if (player.job === 'heretic') {
+    const hpPercent = player.hp / c.maxHp;
+    if (hpPercent <= 0.2) {
+      gain *= 2;
+    }
+  }
+
+  // 다른 직업 50% 속도
+  if (player.job !== 'heretic') {
+    gain = Math.floor(gain * 0.5);
+  }
+
+  // WIL 저항
+  const resist = c.madnessResist || 0;
+  gain = Math.floor(gain * (1 - resist / 100));
+
+  return Math.max(0, gain);
+}
+
+/**
+ * 광기 적용 + 오버플로우 처리
+ */
+function applyMadnessGain(player, gain) {
+  const { calcStats } = require('../utils/calc');
+  const c = calcStats(player);
+  const oldMadness = player.madness || 0;
+  let newMadness = oldMadness + gain;
+
+  const result = {
+    oldMadness,
+    gain,
+    newMadness: 0,
+    overflow: false,
+    overflowDamage: 0
+  };
+
+  // 100 오버플로우
+  if (newMadness >= 100) {
+    result.overflow = true;
+    result.overflowDamage = Math.floor(c.maxHp * 0.1);  // 10%
+    player.hp -= result.overflowDamage;
+    newMadness = 80;  // 리셋
+  }
+
+  player.madness = Math.min(100, newMadness);
+  result.newMadness = player.madness;
+
+  return result;
+}
+
+/**
+ * 광기 페널티 (턴 시작 시)
+ */
+function applyMadnessPenalty(player) {
+  const { calcStats } = require('../utils/calc');
+  const c = calcStats(player);
+  const madness = player.madness || 0;
+  const result = { selfDamage: 0, message: null };
+
+  // 80+ 자해 (턴마다 5%)
+  if (madness >= 80) {
+    const selfDamage = Math.floor(c.maxHp * 0.05);
+    player.hp -= selfDamage;
+    result.selfDamage = selfDamage;
+    result.message = `🌀 광기가 육체를 갉아먹는다... -${selfDamage} HP`;
+  }
+
+  return result;
+}
+
+/**
+ * 해석 성공 시 광기 감소
+ */
+function applyInterpretMadnessDecay(player, interpretResult) {
+  if (interpretResult.result === 'perfect') {
+    const decay = MADNESS_SYSTEM.decay.interpretSuccess || 10;
+    const oldMadness = player.madness || 0;
+    player.madness = Math.max(0, oldMadness - decay);
+    return decay;
+  }
+  return 0;
+}
+
+// ============================================
 // 결투 시뮬레이션
 // ============================================
 
@@ -729,5 +842,9 @@ module.exports = {
   processCooldowns,
   addBattleUnderstanding,
   getBattleUnderstandingLevel,
+  calculateMadnessGain,
+  applyMadnessGain,
+  applyMadnessPenalty,
+  applyInterpretMadnessDecay,
   simulateDuel
 };
